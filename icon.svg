@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="80" fill="#0a0e1a"/>
+  <rect x="40" y="40" width="432" height="432" rx="60" fill="#111827"/>
+  <text x="256" y="200" font-family="Arial Black" font-weight="900" font-size="100" fill="#f59e0b" text-anchor="middle">LR</text>
+  <rect x="80" y="230" width="352" height="4" rx="2" fill="#2a3a55"/>
+  <text x="256" y="340" font-family="Arial" font-weight="700" font-size="60" fill="#10b981" text-anchor="middle">ROTA</text>
+  <rect x="100" y="370" width="60" height="60" rx="6" fill="#f59e0b" opacity="0.8"/>
+  <rect x="180" y="370" width="152" height="60" rx="6" fill="#2a3a55"/>
+  <rect x="352" y="370" width="60" height="60" rx="6" fill="#f59e0b" opacity="0.8"/>
+</svg>
