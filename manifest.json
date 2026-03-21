@@ -1,0 +1,20 @@
+{
+  "name": "Reis Log — LeitorRota",
+  "short_name": "ReisLog",
+  "description": "Leitor de CEP com câmera para identificação de rotas de entrega — Reis Log Transporte e Logística",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#080c18",
+  "theme_color": "#080c18",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["utilities", "productivity", "logistics"],
+  "lang": "pt-BR"
+}
