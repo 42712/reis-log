@@ -1,4 +1,4 @@
-const CACHE = 'reis-log-v2';
+const CACHE = 'reis-log-v3';
 const ASSETS = [
   './',
   './index.html',
