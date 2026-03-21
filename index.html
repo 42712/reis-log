@@ -15,6 +15,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
 <style>
 /* ═══════════════ RESET & ROOT ═══════════════ */
 :root {
@@ -713,6 +714,20 @@ input[type=range]:active::-webkit-slider-thumb { transform: scale(1.3); }
 }
 .pass-field.shake { animation: shake 0.4s ease; }
 @keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-10px)} 40%,80%{transform:translateX(10px)} }
+.pass-wrap { position: relative; }
+.pass-wrap .field { padding-right: 48px; }
+.eye-btn {
+  position: absolute;
+  right: 12px; top: 50%;
+  transform: translateY(-50%);
+  background: none; border: none;
+  color: var(--text3); font-size: 1.2rem;
+  cursor: pointer; padding: 4px;
+  line-height: 1;
+  transition: color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+}
+.eye-btn:active { color: var(--accent); transform: translateY(-50%) scale(0.88); }
 
 /* ═══════════════ TOAST ═══════════════ */
 .toast {
@@ -786,6 +801,98 @@ input[type=range]:active::-webkit-slider-thumb { transform: scale(1.3); }
 /* ═══════════════ FOOTER ═══════════════ */
 .foot-note { font-size: 0.62rem; color: var(--text3); text-align: center; letter-spacing: 1px; padding: 4px 0; }
 
+/* ═══════════════ SCAN MODE SELECTOR ═══════════════ */
+.mode-bar {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm);
+  padding: 5px;
+}
+.mode-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 8px 4px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--text3);
+  cursor: pointer;
+  font-family: var(--font-body);
+  transition: all 0.2s cubic-bezier(0.34,1.56,0.64,1);
+  -webkit-tap-highlight-color: transparent;
+}
+.mode-btn:active { transform: scale(0.88); }
+.mode-btn.active {
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+}
+.mode-btn .mi { font-size: 1.3rem; }
+.mode-btn .ml { font-size: 0.58rem; letter-spacing: 0.8px; text-transform: uppercase; font-weight: 700; }
+
+/* OCR status overlay */
+.ocr-status {
+  position: absolute;
+  top: 10px; left: 10px; right: 10px;
+  background: rgba(8,12,24,0.88);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 0.72rem;
+  color: var(--text2);
+  display: none;
+  align-items: center;
+  gap: 8px;
+  z-index: 5;
+}
+.ocr-status.show { display: flex; }
+.ocr-status.ok { border-color: var(--success); color: var(--success); }
+.ocr-status.bad { border-color: var(--error); color: var(--error); }
+.ocr-spin {
+  width: 14px; height: 14px;
+  border: 2px solid var(--border2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  flex-shrink: 0;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.ocr-text-found {
+  position: absolute;
+  bottom: 44px; left: 10px; right: 10px;
+  background: rgba(8,12,24,0.92);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  padding: 7px 12px;
+  font-size: 0.75rem;
+  color: var(--accent);
+  display: none;
+  flex-wrap: wrap;
+  gap: 4px;
+  z-index: 5;
+  max-height: 60px;
+  overflow: hidden;
+}
+.ocr-text-found.show { display: flex; }
+.ocr-candidate {
+  background: var(--card2);
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  padding: 2px 7px;
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.ocr-candidate:active { background: var(--accent); color: #000; border-color: var(--accent); }
+.ocr-candidate.hi { border-color: var(--success); color: var(--success); }
+
 /* ═══════════════ SCROLLBAR ═══════════════ */
 ::-webkit-scrollbar { width: 3px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -803,9 +910,12 @@ input[type=range]:active::-webkit-slider-thumb { transform: scale(1.3); }
     <div class="modal-handle"></div>
     <div class="modal-title" id="passModalTitle">🔒 Admin</div>
     <div class="modal-sub" id="passModalSub">Digite a senha master para continuar.</div>
-    <input class="field pass-field" id="passInput" type="password"
-      placeholder="••••••" maxlength="30"
-      onkeydown="if(event.key==='Enter')submitPass()">
+    <div class="pass-wrap">
+      <input class="field pass-field" id="passInput" type="password"
+        placeholder="••••••" maxlength="30"
+        onkeydown="if(event.key==='Enter')submitPass()">
+      <button class="eye-btn" type="button" onclick="togglePassVis()" id="eyeBtn" title="Mostrar/ocultar senha">👁️</button>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-primary" onclick="submitPass()">CONFIRMAR</button>
       <button class="btn btn-ghost btn-sm" onclick="closeModal('passModal')">CANCELAR</button>
@@ -854,10 +964,27 @@ input[type=range]:active::-webkit-slider-thumb { transform: scale(1.3); }
 
   <!-- PAGE: CÂMERA -->
   <div class="page active" id="page-scan">
+
+    <!-- Mode selector -->
+    <div class="mode-bar">
+      <button class="mode-btn active" id="modeAuto" onclick="setMode('auto')">
+        <span class="mi">🤖</span><span class="ml">Auto</span>
+      </button>
+      <button class="mode-btn" id="modeOCR" onclick="setMode('ocr')">
+        <span class="mi">🔤</span><span class="ml">OCR</span>
+      </button>
+      <button class="mode-btn" id="modeQR" onclick="setMode('qr')">
+        <span class="mi">⬛</span><span class="ml">QR</span>
+      </button>
+      <button class="mode-btn" id="modeBar" onclick="setMode('bar')">
+        <span class="mi">||||</span><span class="ml">Barras</span>
+      </button>
+    </div>
+
     <div class="cam-wrap" id="camWrap">
       <div class="cam-placeholder" id="camPlaceholder">
         <div class="ph-icon">📦</div>
-        <p>Toque em <strong>ATIVAR CÂMERA</strong> e aponte para o código de barras ou QR do pacote</p>
+        <p>Selecione o modo acima e toque em<br><strong>ATIVAR CÂMERA</strong><br>Aponte para código, QR ou texto com CEP</p>
       </div>
       <video id="videoEl" autoplay playsinline muted></video>
       <canvas id="canvasEl"></canvas>
@@ -868,8 +995,15 @@ input[type=range]:active::-webkit-slider-thumb { transform: scale(1.3); }
           <div class="scan-beam"></div>
         </div>
       </div>
+      <!-- OCR status pill top -->
+      <div class="ocr-status" id="ocrStatus">
+        <div class="ocr-spin" id="ocrSpin"></div>
+        <span id="ocrStatusTxt">Inicializando OCR...</span>
+      </div>
+      <!-- OCR candidates bottom -->
+      <div class="ocr-text-found" id="ocrCandidates"></div>
       <div class="cam-pill" id="camPill" style="display:none">
-        <div class="cam-dot"></div> ESCANEANDO
+        <div class="cam-dot"></div> <span id="camPillTxt">ESCANEANDO</span>
       </div>
     </div>
 
@@ -1132,6 +1266,45 @@ input[type=range]:active::-webkit-slider-thumb { transform: scale(1.3); }
       </div>
     </div>
 
+    <!-- Motores de leitura -->
+    <div class="card">
+      <div class="card-title">🔍 Motores de leitura</div>
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <div class="toggle-title">OCR — Texto impresso</div>
+          <div class="toggle-desc">Lê CEP diretamente de etiquetas e rótulos via câmera</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="cfgUseOCR" checked onchange="saveCfg()">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <div class="toggle-title">QR Code</div>
+          <div class="toggle-desc">Lê QR Codes em pacotes e etiquetas</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="cfgUseQR" checked onchange="saveCfg()">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="toggle-row">
+        <div class="toggle-info">
+          <div class="toggle-title">Código de barras</div>
+          <div class="toggle-desc">Lê Code 128, EAN, Interleaved 2of5</div>
+        </div>
+        <label class="switch">
+          <input type="checkbox" id="cfgUseBar" checked onchange="saveCfg()">
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div style="font-size:0.72rem;color:var(--text3);padding-top:4px;line-height:1.6">
+        💡 Desative os que não usa para ganhar velocidade.<br>
+        No modo <strong style="color:var(--accent)">Auto</strong> apenas os motores ativos são usados.
+      </div>
+    </div>
+
     <!-- Senha -->
     <div class="card">
       <div class="card-title">🔑 Segurança</div>
@@ -1206,7 +1379,8 @@ let CFG = {
   rearCam: true, hiRes: true, cooldown: 3000,
   autoSpeak: true, vibrate: true,
   speakRate: 0.9, speakPitch: 1.1, voice: '',
-  history: true, clearAfter: false
+  history: true, clearAfter: false,
+  useOCR: true, useQR: true, useBar: true
 };
 
 function loadCfg() {
@@ -1227,7 +1401,11 @@ function applyUI() {
   document.getElementById('cfgSpeakPitch').value = CFG.speakPitch;
   document.getElementById('cfgHistory').checked = CFG.history;
   document.getElementById('cfgClearAfter').checked = CFG.clearAfter;
+  document.getElementById('cfgUseOCR').checked = CFG.useOCR;
+  document.getElementById('cfgUseQR').checked = CFG.useQR;
+  document.getElementById('cfgUseBar').checked = CFG.useBar;
   updateRateLabel(); updatePitchLabel();
+  syncModeBar();
 }
 
 function saveCfg() {
@@ -1241,7 +1419,29 @@ function saveCfg() {
   CFG.voice = document.getElementById('cfgVoice').value;
   CFG.history = document.getElementById('cfgHistory').checked;
   CFG.clearAfter = document.getElementById('cfgClearAfter').checked;
+  CFG.useOCR = document.getElementById('cfgUseOCR').checked;
+  CFG.useQR  = document.getElementById('cfgUseQR').checked;
+  CFG.useBar = document.getElementById('cfgUseBar').checked;
   localStorage.setItem('rotaCfg', JSON.stringify(CFG));
+  syncModeBar();
+}
+
+// Keep mode-bar in sync with CFG engine toggles
+function syncModeBar() {
+  const noneActive = !CFG.useOCR && !CFG.useQR && !CFG.useBar;
+  // Dim/hide mode buttons that are disabled by config
+  const map = { auto: true, ocr: CFG.useOCR, qr: CFG.useQR, bar: CFG.useBar };
+  ['auto','ocr','qr','bar'].forEach(id => {
+    const btn = document.getElementById('mode' + id.charAt(0).toUpperCase() + id.slice(1));
+    if (!btn) return;
+    btn.style.opacity = map[id] ? '1' : '0.35';
+    btn.style.pointerEvents = map[id] ? 'auto' : 'none';
+  });
+  // If current mode is now disabled, fall back to auto
+  if (scanMode === 'ocr' && !CFG.useOCR) setMode('auto');
+  if (scanMode === 'qr'  && !CFG.useQR)  setMode('auto');
+  if (scanMode === 'bar' && !CFG.useBar) setMode('auto');
+  if (noneActive) showToast('⚠️ Nenhum motor ativo — ative pelo menos um', 'warn');
 }
 
 function updateRateLabel() {
@@ -1328,9 +1528,13 @@ function requirePass(title, sub, cb) {
   passMode = 'verify';
   document.getElementById('passModalTitle').textContent = title;
   document.getElementById('passModalSub').textContent = sub;
-  document.getElementById('passInput').value = '';
+  const inp = document.getElementById('passInput');
+  inp.value = '';
+  inp.type = 'password';
+  inp.style.letterSpacing = '8px';
+  document.getElementById('eyeBtn').textContent = '👁️';
   openModal('passModal');
-  setTimeout(() => document.getElementById('passInput').focus(), 350);
+  setTimeout(() => inp.focus(), 350);
 }
 
 function submitPass() {
@@ -1359,6 +1563,21 @@ function shakePass() {
   inp.classList.remove('shake');
   void inp.offsetWidth;
   inp.classList.add('shake');
+}
+
+function togglePassVis() {
+  const inp = document.getElementById('passInput');
+  const btn = document.getElementById('eyeBtn');
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    inp.style.letterSpacing = '4px';
+    btn.textContent = '🙈';
+  } else {
+    inp.type = 'password';
+    inp.style.letterSpacing = '8px';
+    btn.textContent = '👁️';
+  }
+  inp.focus();
 }
 
 function askChangePass() {
@@ -1498,6 +1717,147 @@ function formatCEP(el) {
 // ════════════════════════════════════════════════════
 //  CAMERA
 // ════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════
+//  SCAN MODE
+// ════════════════════════════════════════════════════
+let scanMode = 'auto'; // auto | ocr | qr | bar
+
+function setMode(m) {
+  scanMode = m;
+  ['auto','ocr','qr','bar'].forEach(id => {
+    document.getElementById('mode' + id.charAt(0).toUpperCase() + id.slice(1))
+      .classList.toggle('active', id === m);
+  });
+  const labels = { auto:'🤖 AUTO', ocr:'🔤 OCR TEXTO', qr:'⬛ QR CODE', bar:'|||| CÓDIGO BARRAS' };
+  const pill = document.getElementById('camPillTxt');
+  if (pill) pill.textContent = labels[m] || 'ESCANEANDO';
+  // Show hint if OCR selected while cam off
+  if (m === 'ocr' && !stream) {
+    showToast('Modo OCR: aponte para rótulos e etiquetas com CEP', '');
+  }
+}
+
+// ════════════════════════════════════════════════════
+//  TESSERACT OCR
+// ════════════════════════════════════════════════════
+let ocrWorker = null;
+let ocrReady = false;
+let ocrBusy = false;
+
+async function initOCR() {
+  if (ocrWorker) return;
+  setOCRStatus('⏳ Carregando OCR...', false);
+  try {
+    ocrWorker = await Tesseract.createWorker('por', 1, {
+      logger: m => {
+        if (m.status === 'loading tesseract core') setOCRStatus('📦 Baixando OCR...', false);
+        if (m.status === 'initializing tesseract') setOCRStatus('⚙️ Iniciando OCR...', false);
+        if (m.status === 'loading language traineddata') setOCRStatus('🌐 Carregando idioma...', false);
+        if (m.status === 'initialized api') { ocrReady = true; setOCRStatus('✅ OCR pronto', true); }
+      }
+    });
+    // Optimise for numbers/CEP — whitelist digits and dash
+    await ocrWorker.setParameters({
+      tessedit_char_whitelist: '0123456789-. ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz',
+      preserve_interword_spaces: '1',
+    });
+    ocrReady = true;
+    setOCRStatus('✅ OCR pronto', true);
+  } catch(e) {
+    setOCRStatus('❌ Erro ao carregar OCR', false, true);
+    ocrWorker = null;
+  }
+}
+
+function setOCRStatus(msg, ok, bad=false) {
+  const el = document.getElementById('ocrStatus');
+  const txt = document.getElementById('ocrStatusTxt');
+  const spin = document.getElementById('ocrSpin');
+  if (!el) return;
+  txt.textContent = msg;
+  el.className = 'ocr-status show' + (ok ? ' ok' : bad ? ' bad' : '');
+  spin.style.display = ok || bad ? 'none' : 'block';
+  if (ok) setTimeout(() => { el.classList.remove('show'); }, 2500);
+}
+
+// Pre-process canvas for better OCR — crop to center, increase contrast
+function preprocessForOCR(srcCanvas) {
+  const W = srcCanvas.width, H = srcCanvas.height;
+  // Crop to central 80% where label likely is
+  const cx = Math.floor(W * 0.1), cy = Math.floor(H * 0.1);
+  const cw = Math.floor(W * 0.8), ch = Math.floor(H * 0.8);
+  const out = document.createElement('canvas');
+  out.width = cw * 2; out.height = ch * 2; // upscale 2x for better OCR
+  const ctx = out.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(srcCanvas, cx, cy, cw, ch, 0, 0, out.width, out.height);
+  // Increase contrast via pixel manipulation
+  const id = ctx.getImageData(0, 0, out.width, out.height);
+  const d = id.data;
+  for (let i = 0; i < d.length; i += 4) {
+    // Greyscale
+    const g = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
+    // High contrast threshold
+    const v = g > 128 ? 255 : 0;
+    d[i] = d[i+1] = d[i+2] = v;
+  }
+  ctx.putImageData(id, 0, 0);
+  return out;
+}
+
+async function runOCR(srcCanvas) {
+  if (!ocrWorker || !ocrReady || ocrBusy) return null;
+  ocrBusy = true;
+  try {
+    const processed = preprocessForOCR(srcCanvas);
+    const { data } = await ocrWorker.recognize(processed);
+    return data.text;
+  } catch(e) {
+    return null;
+  } finally {
+    ocrBusy = false;
+  }
+}
+
+// Extract ALL CEP candidates from OCR text
+function extractAllCEPs(text) {
+  if (!text) return [];
+  const candidates = new Set();
+  // Format 00000-000
+  const re1 = /\b(\d{5}[-\s]?\d{3})\b/g;
+  let m;
+  while ((m = re1.exec(text)) !== null) {
+    const digits = m[1].replace(/\D/g,'');
+    if (digits.length === 8) candidates.add(digits.slice(0,5) + '-' + digits.slice(5));
+  }
+  // 8 consecutive digits
+  const re2 = /\b(\d{8})\b/g;
+  while ((m = re2.exec(text)) !== null) {
+    const d = m[1];
+    candidates.add(d.slice(0,5) + '-' + d.slice(5));
+  }
+  return [...candidates];
+}
+
+function showOCRCandidates(ceps) {
+  const el = document.getElementById('ocrCandidates');
+  if (!el) return;
+  if (!ceps.length) { el.classList.remove('show'); return; }
+  el.className = 'ocr-text-found show';
+  el.innerHTML = ceps.map(cep => {
+    const inDB = !!lookup(cep);
+    return `<span class="ocr-candidate${inDB?' hi':''}" onclick="forceHandleScan('${cep}')">${cep}${inDB?' ✓':''}</span>`;
+  }).join('');
+}
+
+function forceHandleScan(cep) {
+  lastCEP = null; // allow re-trigger
+  handleScan(cep);
+}
+
+// ════════════════════════════════════════════════════
+//  CAMERA
+// ════════════════════════════════════════════════════
 let stream = null, scanning = false, scanInterval = null;
 let flashTrack = null, flashOn = false;
 
@@ -1510,6 +1870,12 @@ async function startCamera() {
   const btn = document.getElementById('btnCam');
   btn.disabled = true;
   btn.textContent = '⏳ Abrindo câmera...';
+
+  // Pre-load OCR if needed
+  if (scanMode === 'ocr' || scanMode === 'auto') {
+    initOCR(); // fire async, don't await — camera opens immediately
+  }
+
   try {
     const constraints = {
       video: {
@@ -1553,6 +1919,8 @@ function stopCamera() {
   document.getElementById('camPill').style.display = 'none';
   document.getElementById('camWrap').classList.remove('scanning','found');
   document.getElementById('hbtnFlash').style.display = 'none';
+  document.getElementById('ocrStatus').classList.remove('show');
+  document.getElementById('ocrCandidates').classList.remove('show');
   const btn = document.getElementById('btnCam');
   btn.className = 'btn btn-cam';
   btn.innerHTML = '📷 ATIVAR CÂMERA';
@@ -1565,31 +1933,100 @@ function startScanning() {
   const canvas = document.getElementById('canvasEl');
   const ctx = canvas.getContext('2d');
   let cooldown = false;
+  let ocrFrameCount = 0;
 
-  scanInterval = setInterval(() => {
+  scanInterval = setInterval(async () => {
     if (!scanning || cooldown || video.readyState < 2) return;
+
     canvas.width = video.videoWidth;
     canvas.height = video.videoHeight;
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-    const qr = jsQR(imgData.data, canvas.width, canvas.height);
-    if (qr && qr.data) {
-      const f = extractCEP(qr.data);
-      if (f) { handleScan(f); cooldown = true; setTimeout(() => cooldown = false, CFG.cooldown); return; }
+    const useQR  = CFG.useQR  && (scanMode === 'qr'  || scanMode === 'auto');
+    const useBar = CFG.useBar && (scanMode === 'bar' || scanMode === 'auto');
+    const useOCR = CFG.useOCR && (scanMode === 'ocr' || scanMode === 'auto');
+
+    // ── QR CODE ──────────────────────────────────────
+    if (useQR) {
+      const qr = jsQR(imgData.data, canvas.width, canvas.height);
+      if (qr && qr.data) {
+        const f = extractCEP(qr.data);
+        if (f) {
+          handleScan(f);
+          cooldown = true;
+          setTimeout(() => cooldown = false, CFG.cooldown);
+          return;
+        }
+      }
     }
 
-    Quagga.decodeSingle({
-      decoder: { readers: ['code_128_reader','interleaved_2of5_reader','ean_reader','ean_8_reader'] },
-      locate: true,
-      src: canvas.toDataURL('image/png')
-    }, result => {
-      if (result && result.codeResult && !cooldown) {
-        const f = extractCEP(result.codeResult.code);
-        if (f) { handleScan(f); cooldown = true; setTimeout(() => cooldown = false, CFG.cooldown); }
+    // ── BARCODE ──────────────────────────────────────
+    if (useBar) {
+      Quagga.decodeSingle({
+        decoder: { readers: ['code_128_reader','interleaved_2of5_reader','ean_reader','ean_8_reader'] },
+        locate: true,
+        src: canvas.toDataURL('image/png')
+      }, result => {
+        if (result && result.codeResult && !cooldown) {
+          const f = extractCEP(result.codeResult.code);
+          if (f) {
+            handleScan(f);
+            cooldown = true;
+            setTimeout(() => cooldown = false, CFG.cooldown);
+          }
+        }
+      });
+    }
+
+    // ── OCR — run every 3 frames to not overload CPU ──
+    if (useOCR && !ocrBusy) {
+      ocrFrameCount++;
+      if (ocrFrameCount % 3 !== 0) return;
+
+      if (!ocrWorker) { initOCR(); return; }
+      if (!ocrReady) return;
+
+      const ocrStatusEl = document.getElementById('ocrStatus');
+      const ocrTxt = document.getElementById('ocrStatusTxt');
+      const ocrSpin = document.getElementById('ocrSpin');
+      if (ocrStatusEl) {
+        ocrStatusEl.className = 'ocr-status show';
+        ocrTxt.textContent = '🔍 Lendo texto...';
+        ocrSpin.style.display = 'block';
       }
-    });
-  }, 400);
+
+      const text = await runOCR(canvas);
+
+      if (ocrStatusEl) ocrStatusEl.classList.remove('show');
+
+      if (!text || cooldown) return;
+
+      const ceps = extractAllCEPs(text);
+
+      if (ceps.length > 0) {
+        // Show candidates — highlight ones in DB
+        showOCRCandidates(ceps);
+
+        // Auto-trigger if exactly one CEP found and it's in the DB
+        const inDB = ceps.filter(c => !!lookup(c));
+        if (inDB.length === 1 && !cooldown) {
+          handleScan(inDB[0]);
+          cooldown = true;
+          setTimeout(() => { cooldown = false; showOCRCandidates([]); }, CFG.cooldown);
+        } else if (ceps.length === 1 && !cooldown) {
+          // Only one candidate even if not in DB
+          handleScan(ceps[0]);
+          cooldown = true;
+          setTimeout(() => { cooldown = false; showOCRCandidates([]); }, CFG.cooldown);
+        }
+        // Multiple candidates — show buttons for manual pick
+      } else {
+        showOCRCandidates([]);
+      }
+    }
+
+  }, 500);
 }
 
 function handleScan(rawCep) {
