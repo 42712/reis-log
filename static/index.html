@@ -12,7 +12,7 @@
 <link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" href="/icon.svg">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
-<title>Reis Log — LeitorRota Rápido</title>
+<title>Reis Log — LeitorRota</title>
 <style>
 :root{
   --bg:#080c18;--surface:#0f1526;--card:#141d30;--card2:#1a2540;
@@ -32,12 +32,7 @@ body{
   position:relative;height:100dvh;overflow:hidden;
 }
 
-.app-header{
-  flex-shrink:0;background:var(--surface);
-  border-bottom:1px solid var(--border);
-  padding:calc(10px + var(--safe-top)) 16px 10px;
-  display:flex;align-items:center;gap:12px;z-index:10;
-}
+.app-header{flex-shrink:0;background:var(--surface);border-bottom:1px solid var(--border);padding:calc(10px + var(--safe-top)) 16px 10px;display:flex;align-items:center;gap:12px;z-index:10;}
 .logo-img{height:36px;width:auto;}
 .logo-title{font-family:var(--font-display);font-size:1.25rem;letter-spacing:3px;}
 .logo-title .lt-rota{color:var(--accent);font-size:1.4rem;}
@@ -45,10 +40,7 @@ body{
 .header-actions{margin-left:auto;}
 .hbtn{width:36px;height:36px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;}
 
-.bottom-nav{
-  flex-shrink:0;background:var(--surface);border-top:1px solid var(--border);
-  display:grid;grid-template-columns:repeat(4,1fr);padding-bottom:var(--safe-bot);
-}
+.bottom-nav{flex-shrink:0;background:var(--surface);border-top:1px solid var(--border);display:grid;grid-template-columns:repeat(4,1fr);padding-bottom:var(--safe-bot);}
 .nav-item{display:flex;flex-direction:column;align-items:center;padding:8px 2px;cursor:pointer;}
 .nav-icon{font-size:1.15rem;}
 .nav-label{font-size:.55rem;letter-spacing:.5px;color:var(--text3);}
@@ -268,7 +260,7 @@ let scanning = false;
 let scanInterval = null;
 let lastCepFound = "";
 let lastScanTime = 0;
-let geminiBusy = false;
+let processingImage = false;
 
 // Cache de CEPs (busca instantânea)
 const cepCache = new Map();
@@ -276,7 +268,7 @@ const cepCache = new Map();
 let CFG = {
   rearCam: true,
   hiRes: true,
-  fastMode: false,
+  fastMode: true,  // Modo ultra-rápido ativado por padrão
   autoSpeak: true,
   vibrate: true,
   history: true
@@ -395,7 +387,7 @@ function formatCEP(el) {
 }
 
 // ==================================================
-// CÂMERA COM LEITURA VISUAL (SEM OCR COMPLEXO)
+// CÂMERA COM LEITURA INSTANTÂNEA (SEM OCR PESADO)
 // ==================================================
 async function toggleCamera() {
   if (stream) {
@@ -441,7 +433,7 @@ async function startCamera() {
     btn.innerHTML = '⏹ PARAR';
     
     scanning = true;
-    startFastScan();
+    startInstantScan();
   } catch(e) {
     btn.disabled = false;
     btn.className = 'btn btn-cam';
@@ -468,7 +460,7 @@ function stopCamera() {
   btn.innerHTML = '📷 ATIVAR CÂMERA';
 }
 
-// Função que detecta números em um frame de vídeo (SIMPLES E RÁPIDO)
+// Função que detecta números em um frame de vídeo (MUITO RÁPIDO)
 function detectNumbersInFrame(video, canvas) {
   const ctx = canvas.getContext('2d');
   const vw = video.videoWidth;
@@ -476,11 +468,11 @@ function detectNumbersInFrame(video, canvas) {
   
   if (!vw || !vh) return null;
   
-  // Área central onde o CEP provavelmente está
-  const cropX = Math.floor(vw * 0.2);
-  const cropY = Math.floor(vh * 0.35);
-  const cropW = Math.floor(vw * 0.6);
-  const cropH = Math.floor(vh * 0.3);
+  // Área central onde o CEP provavelmente está (otimizada)
+  const cropX = Math.floor(vw * 0.18);
+  const cropY = Math.floor(vh * 0.32);
+  const cropW = Math.floor(vw * 0.64);
+  const cropH = Math.floor(vh * 0.36);
   
   canvas.width = cropW;
   canvas.height = cropH;
@@ -491,65 +483,51 @@ function detectNumbersInFrame(video, canvas) {
   const data = imgData.data;
   
   // Detectar áreas escuras (onde estão os números)
-  let darkPixels = [];
+  let darkCount = 0;
+  const threshold = 80; // limiar de brilho para considerar escuro
+  
   for (let i = 0; i < data.length; i += 4) {
-    const r = data[i];
-    const g = data[i+1];
-    const b = data[i+2];
-    const brightness = (r + g + b) / 3;
-    if (brightness < 100) { // área escura = possível número
-      darkPixels.push({
-        x: (i / 4) % cropW,
-        y: Math.floor((i / 4) / cropW),
-        brightness: brightness
-      });
+    const brightness = (data[i] + data[i+1] + data[i+2]) / 3;
+    if (brightness < threshold) {
+      darkCount++;
     }
   }
   
-  // Se tem muitas áreas escuras, provavelmente tem números
-  if (darkPixels.length > cropW * cropH * 0.05) {
-    return "DETECTADO";
+  const darkRatio = darkCount / (cropW * cropH);
+  
+  // Se tem pelo menos 5% de áreas escuras, provavelmente tem números
+  if (darkRatio > 0.05) {
+    // Retorna a imagem base64 para envio ao servidor
+    return canvas.toDataURL('image/jpeg', 0.5);
   }
   return null;
 }
 
-function startFastScan() {
+function startInstantScan() {
   const video = document.getElementById('videoEl');
   const canvas = document.createElement('canvas');
   let lastDetection = "";
   let detectionCount = 0;
   
   scanInterval = setInterval(async () => {
-    if (!scanning) return;
+    if (!scanning || processingImage) return;
     
     const now = Date.now();
-    const detect = detectNumbersInFrame(video, canvas);
+    const imageData = detectNumbersInFrame(video, canvas);
     
-    if (detect === "DETECTADO") {
+    if (imageData) {
       detectionCount++;
       
-      // Se detectou números por 3 frames seguidos, tenta ler via API
-      if (detectionCount >= 3 && (now - lastScanTime) > 2000) {
+      // Se detectou números por 2 frames seguidos, processa
+      if (detectionCount >= 2 && (now - lastScanTime) > 1500) {
         detectionCount = 0;
         lastScanTime = now;
+        processingImage = true;
         
-        // Extrai a área com números para enviar ao servidor
-        const ctx = canvas.getContext('2d');
-        const vw = video.videoWidth;
-        const vh = video.videoHeight;
-        const cropX = Math.floor(vw * 0.2);
-        const cropY = Math.floor(vh * 0.35);
-        const cropW = Math.floor(vw * 0.6);
-        const cropH = Math.floor(vh * 0.3);
+        document.getElementById('camPillTxt').textContent = '📷 LENDO...';
         
-        canvas.width = cropW;
-        canvas.height = cropH;
-        ctx.drawImage(video, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
-        
-        document.getElementById('camPillTxt').textContent = 'LENDO...';
-        
-        // Chama o OCR apenas quando detectou números
-        const cep = await runGeminiOCR(canvas);
+        // Envia para o servidor processar
+        const cep = await processImage(imageData);
         
         if (cep && cep !== lastCepFound) {
           lastCepFound = cep;
@@ -557,17 +535,18 @@ function startFastScan() {
           const res = await lookup(cep);
           
           if (CFG.vibrate && navigator.vibrate) {
-            if (res) navigator.vibrate([100, 50, 100]);
+            if (res) navigator.vibrate([80, 40, 80]);
             else navigator.vibrate([200]);
           }
           
           showResult(cep, res?.rota, !res, 'resultWrap', 'resultCard', 'resCEP', 'resRota');
           
-          // Pisca feedback visual
+          // Feedback visual
           document.getElementById('camWrap').classList.add('found');
           setTimeout(() => document.getElementById('camWrap').classList.remove('found'), 500);
         }
         document.getElementById('camPillTxt').textContent = 'PRONTO';
+        processingImage = false;
       }
     } else {
       detectionCount = Math.max(0, detectionCount - 1);
@@ -575,32 +554,27 @@ function startFastScan() {
   }, CFG.fastMode ? 80 : 120);
 }
 
-async function runGeminiOCR(srcCanvas) {
-  if (geminiBusy) return null;
-  geminiBusy = true;
+async function processImage(base64Image) {
   try {
-    const base64 = srcCanvas.toDataURL('image/jpeg', 0.6);
     const response = await fetch('/api/ocr', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image: base64 })
+      body: JSON.stringify({ image: base64Image })
     });
     const data = await response.json();
     if (data.found && data.cep) return data.cep;
     return null;
   } catch(e) {
     return null;
-  } finally {
-    geminiBusy = false;
   }
 }
 
-function toggleFlash() {
+async function toggleFlash() {
   if (!stream) return;
   const track = stream.getVideoTracks()[0];
   if (track && track.getCapabilities().torch) {
-    track.applyConstraints({ advanced: [{ torch: !flashOn }] });
     flashOn = !flashOn;
+    await track.applyConstraints({ advanced: [{ torch: flashOn }] });
   }
 }
 let flashOn = false;
