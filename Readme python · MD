@@ -1,0 +1,139 @@
+# 🚚 Reis Log — LeitorRota Python
+
+Versão Python/Flask do app de leitura de CEP com API JSON.
+
+## 📁 Estrutura
+
+```
+reis-log-python/
+├── app.py              ← Servidor Flask principal
+├── cep_rota.json       ← Base de 13.078 CEPs
+├── requirements.txt    ← Dependências
+└── README_PYTHON.md    ← Este arquivo
+```
+
+## 🚀 Como rodar
+
+### 1. Instalar dependências
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Configurar chave Gemini
+Abra `app.py` e edite a linha:
+```python
+GEMINI_API_KEY = "SUA_CHAVE_AQUI"
+```
+
+### 3. Iniciar servidor
+```bash
+python app.py
+```
+O servidor sobe em `http://localhost:5000`
+
+---
+
+## 📡 API — Endpoints
+
+### Busca de CEP (resposta imediata via JSON)
+
+#### GET /api/cep/{cep}
+```bash
+curl http://localhost:5000/api/cep/74080-010
+curl http://localhost:5000/api/cep/74080010
+```
+**Resposta:**
+```json
+{ "found": true, "cep": "74080-010", "rota": "119" }
+```
+
+#### POST /api/cep
+```bash
+curl -X POST http://localhost:5000/api/cep \
+  -H "Content-Type: application/json" \
+  -d '{"cep": "74080010"}'
+```
+
+---
+
+### OCR via câmera (Gemini AI)
+
+#### POST /api/ocr
+```bash
+curl -X POST http://localhost:5000/api/ocr \
+  -H "Content-Type: application/json" \
+  -d '{"image": "<base64_jpeg>"}'
+```
+**Resposta:**
+```json
+{
+  "found": true,
+  "cep": "74080-010",
+  "rota": "119",
+  "raw_text": "74080-010",
+  "candidates": ["74080-010"]
+}
+```
+
+---
+
+### Admin (requer senha master)
+
+#### Estatísticas
+```bash
+curl http://localhost:5000/api/admin/stats \
+  -H "X-Master-Pass: rota202601"
+```
+
+#### Adicionar CEP
+```bash
+curl -X POST http://localhost:5000/api/admin/add \
+  -H "Content-Type: application/json" \
+  -d '{"password": "rota202601", "cep": "74999-999", "rota": "200"}'
+```
+
+#### Importar lista
+```bash
+curl -X POST http://localhost:5000/api/admin/import \
+  -H "Content-Type: application/json" \
+  -d '{
+    "password": "rota202601",
+    "data": [
+      {"cep": "74999-001", "rota": "200"},
+      {"cep": "74999-002", "rota": "201"}
+    ]
+  }'
+```
+
+#### Exportar base
+```bash
+curl http://localhost:5000/api/admin/export \
+  -H "X-Master-Pass: rota202601" > backup.json
+```
+
+#### Deletar CEP
+```bash
+curl -X POST http://localhost:5000/api/admin/delete \
+  -H "Content-Type: application/json" \
+  -d '{"password": "rota202601", "cep": "74999-999"}'
+```
+
+---
+
+## 🔑 Trocar senha master
+Edite `app.py`:
+```python
+MASTER_PASS = "sua_nova_senha"
+```
+
+## 🌐 Deploy em produção
+Para rodar em produção use Gunicorn:
+```bash
+pip install gunicorn
+gunicorn -w 4 -b 0.0.0.0:5000 app:app
+```
+
+## 📱 Integrar com o app mobile
+O app HTML (`index.html`) pode apontar para este servidor.
+Mude a URL do Gemini no `index.html` para usar este servidor como proxy,
+mantendo sua chave API segura no servidor Python.
