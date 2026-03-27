@@ -1,7 +1,7 @@
 {
-  "name": "Reis Log",
+  "name": "Reis Log Pro",
   "short_name": "ReisLog",
-  "description": "Leitor de rotas de entrega",
+  "description": "Leitor de rotas de entrega - Leitura Instantânea",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#080c18",
