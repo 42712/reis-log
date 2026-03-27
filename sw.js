@@ -1,11 +1,9 @@
-const CACHE = 'reis-log-v10';
+const CACHE = 'reis-log-v11';
 const ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/icon.svg',
-  'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js',
-  'https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js'
+  '/icon.svg'
 ];
 
 self.addEventListener('install', e => {
