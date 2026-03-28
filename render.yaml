@@ -6,13 +6,9 @@ services:
     startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 60
     envVars:
       - key: GEMINI_API_KEY
-        sync: false          # defina no painel do Render
+        sync: false
       - key: ADMIN_PASSWORD
-        sync: false          # defina no painel do Render (padrão: rota202601)
+        sync: false
       - key: FLASK_ENV
         value: production
     autoDeploy: true
-    disk:
-      name: data
-      mountPath: /opt/render/project/src
-      sizeGB: 1
