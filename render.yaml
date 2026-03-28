@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: reis-log
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 60
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false          # defina no painel do Render
+      - key: ADMIN_PASSWORD
+        sync: false          # defina no painel do Render (padrão: rota202601)
+      - key: FLASK_ENV
+        value: production
+    autoDeploy: true
+    disk:
+      name: data
+      mountPath: /opt/render/project/src
+      sizeGB: 1
