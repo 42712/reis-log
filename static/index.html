@@ -46,7 +46,7 @@ body{
 .pages{flex:1;overflow:hidden;position:relative;}
 .page{position:absolute;inset:0;overflow-y:auto;padding:16px 14px;display:flex;flex-direction:column;gap:14px;opacity:0;pointer-events:none;transition:opacity .2s;}
 .page.active{opacity:1;pointer-events:all;}
-.cam-wrap{position:relative;border-radius:var(--r);overflow:hidden;background:#000;aspect-ratio:4/3;border:2px solid var(--border);margin-bottom:8px;}
+.cam-wrap{position:relative;border-radius:var(--r);overflow:hidden;background:#000;aspect-ratio:4/3;border:2px solid var(--border);margin-bottom:12px;}
 #videoEl{width:100%;height:100%;object-fit:cover;display:block;}
 .cam-placeholder{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--surface);}
 .cam-placeholder .ph-icon{font-size:3.5rem;}
@@ -56,21 +56,20 @@ body{
 .cam-pill{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.7);border-radius:20px;padding:5px 14px;font-size:.65rem;color:var(--accent);white-space:nowrap;}
 .cam-dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--accent);animation:blink 1s infinite;margin-right:6px;}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
-.btn{flex:1;padding:15px;border:none;border-radius:var(--r-sm);font-family:var(--font-display);font-size:1.05rem;cursor:pointer;transition:transform .1s;}
+.btn{flex:1;padding:15px;border:none;border-radius:var(--r-sm);font-family:var(--font-display);font-size:1rem;cursor:pointer;transition:transform .1s;font-weight:bold;}
 .btn:active{transform:scale(.97);}
 .btn-cam{background:linear-gradient(135deg,var(--accent) 0%,#e8920f 100%);color:#000;}
 .btn-stop{background:var(--card2);color:var(--text);border:1px solid var(--border2);}
 .btn-primary{background:var(--accent);color:#000;}
-.btn-success{background:linear-gradient(135deg,var(--success) 0%,#16a37a 100%);color:#000;}
-.btn-sq{flex:none;width:52px;height:52px;}
-.btn-capture{background:linear-gradient(135deg,var(--success) 0%,#16a37a 100%);color:#000;margin-top:12px;font-size:1.2rem;padding:16px;}
+.btn-capture{background:linear-gradient(135deg,var(--success) 0%,#16a37a 100%);color:#000;margin-top:12px;font-size:1.2rem;padding:16px;width:100%;}
 .btn-capture:disabled{opacity:0.5;transform:none;}
+.btn-capture.hidden{display:none;}
 .result-wrap{overflow:hidden;max-height:0;transition:max-height .3s;}
 .result-wrap.open{max-height:500px;}
 .result-card{background:var(--card);border:2px solid var(--border);border-radius:var(--r);padding:20px;text-align:center;}
 .result-card.ok{border-color:var(--success);}
 .result-card.err{border-color:var(--error);}
-.res-cep{font-size:1.2rem;color:var(--text2);margin-bottom:8px;}
+.res-cep{font-size:1.2rem;color:var(--text2);margin-bottom:8px;font-family:monospace;letter-spacing:1px;}
 .res-rota{font-family:var(--font-display);font-size:clamp(4rem,20vw,7rem);color:var(--success);}
 .res-rota.err-txt{font-size:1.2rem;color:var(--error);}
 .speak-btn{padding:8px 16px;border-radius:8px;border:1px solid var(--success);background:var(--success-dim);color:var(--success);cursor:pointer;margin-top:10px;}
@@ -92,7 +91,8 @@ body{
 .toast.show{opacity:1;}
 .loading-spinner{display:inline-block;width:18px;height:18px;border:2px solid #fff;border-top-color:var(--accent);border-radius:50%;animation:spin 0.6s linear infinite;margin-right:8px;}
 @keyframes spin{to{transform:rotate(360deg)}}
-.btn-group{display:flex;gap:10px;margin-top:8px;}
+.btn-group{display:flex;gap:10px;flex-direction:column;}
+.foot-note{font-size:.65rem;color:var(--text3);text-align:center;margin-top:8px;}
 </style>
 </head>
 <body>
@@ -155,9 +155,8 @@ body{
     
     <div class="btn-group">
       <button class="btn btn-cam" id="btnCam" onclick="toggleCamera()">📷 ATIVAR CÂMERA</button>
+      <button class="btn btn-capture hidden" id="btnCapture" onclick="capturePhoto()">📸 TIRAR FOTO</button>
     </div>
-    
-    <button class="btn btn-capture" id="btnCapture" onclick="capturePhoto()" disabled style="display:none">📸 TIRAR FOTO</button>
     
     <div class="result-wrap" id="resultWrap">
       <div class="result-card" id="resultCard">
@@ -398,10 +397,10 @@ async function toggleCamera() {
 }
 
 async function startCamera() {
-  const btn = document.getElementById('btnCam');
-  const captureBtn = document.getElementById('btnCapture');
-  btn.disabled = true;
-  btn.textContent = '⏳ ABRINDO...';
+  const btnCam = document.getElementById('btnCam');
+  const btnCapture = document.getElementById('btnCapture');
+  btnCam.disabled = true;
+  btnCam.textContent = '⏳ ABRINDO...';
   
   try {
     const constraints = {
@@ -429,19 +428,19 @@ async function startCamera() {
     document.getElementById('camPill').style.display = 'flex';
     document.getElementById('camWrap').classList.add('scanning');
     
-    btn.disabled = false;
-    btn.className = 'btn btn-stop';
-    btn.innerHTML = '⏹ PARAR CÂMERA';
+    btnCam.disabled = false;
+    btnCam.className = 'btn btn-stop';
+    btnCam.innerHTML = '⏹ PARAR CÂMERA';
     
-    // Mostra botão de tirar foto
-    captureBtn.style.display = 'block';
-    captureBtn.disabled = false;
+    // Mostra o botão de tirar foto (remove a classe hidden)
+    btnCapture.classList.remove('hidden');
+    btnCapture.disabled = false;
     
   } catch(e) {
-    btn.disabled = false;
-    btn.className = 'btn btn-cam';
-    btn.innerHTML = '📷 ATIVAR CÂMERA';
-    captureBtn.style.display = 'none';
+    btnCam.disabled = false;
+    btnCam.className = 'btn btn-cam';
+    btnCam.innerHTML = '📷 ATIVAR CÂMERA';
+    btnCapture.classList.add('hidden');
     showToast('Erro: ' + e.message, 'bad');
     stream = null;
   }
@@ -458,13 +457,13 @@ function stopCamera() {
   document.getElementById('camPill').style.display = 'none';
   document.getElementById('camWrap').classList.remove('scanning', 'found');
   
-  const btn = document.getElementById('btnCam');
-  btn.className = 'btn btn-cam';
-  btn.innerHTML = '📷 ATIVAR CÂMERA';
+  const btnCam = document.getElementById('btnCam');
+  btnCam.className = 'btn btn-cam';
+  btnCam.innerHTML = '📷 ATIVAR CÂMERA';
   
-  const captureBtn = document.getElementById('btnCapture');
-  captureBtn.style.display = 'none';
-  captureBtn.disabled = true;
+  const btnCapture = document.getElementById('btnCapture');
+  btnCapture.classList.add('hidden');
+  btnCapture.disabled = true;
 }
 
 async function capturePhoto() {
