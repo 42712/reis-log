@@ -1,14 +1,23 @@
 {
-  "name": "Reis Log — LeitorRota",
-  "short_name": "Reis Log",
-  "description": "Leitor de rotas de entrega com IA",
+  "name": "Reis Log",
+  "short_name": "ReisLog",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#080c18",
   "theme_color": "#080c18",
-  "orientation": "portrait",
+  "description": "Leitor de rotas de entrega com IA",
   "icons": [
-    { "src": "/static/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png" }
+    {
+      "src": "/static/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
   ]
 }
