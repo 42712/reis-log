@@ -1,148 +1,189 @@
 """
-Reis Log — LeitorRota (Python/Flask)
-Servidor otimizado com OCR rápido e base de CEPs em memória
+Reis Log — LeitorRota Python/Flask
+OCR com Gemini Vision (principal) + Tesseract melhorado (fallback)
 """
 
-import json
-import re
-import base64
-import os
-import io
-import time
+import json, re, base64, os, time, requests
 from flask import Flask, jsonify, request, send_from_directory
-from PIL import Image
-import pytesseract
-import cv2
-import numpy as np
 
 # ==================================================
-# CONFIGURAÇÃO
+# ⚙️  CONFIGURAÇÃO — troque a chave se necessário
 # ==================================================
-MASTER_PASS = "rota202601"
-PORT = 5000
-HOST = "0.0.0.0"
+GEMINI_API_KEY = "AIzaSyAVnKMUIZ6iHmY_Et74GtevTQOCcmmdcPo"   # ← substitua se revogada
+MASTER_PASS    = "rota202601"
+PORT           = 5000
+HOST           = "0.0.0.0"
+
+GEMINI_URL = (
+    "https://generativelanguage.googleapis.com/v1beta/models/"
+    "gemini-2.0-flash-lite:generateContent?key=" + GEMINI_API_KEY
+)
 
 # ==================================================
-# BANCO DE CEPs (carrega em memória - resposta em milissegundos)
+# 📦  BANCO DE CEPs — carregado em memória (O(1))
 # ==================================================
-CEP_DB_PATH = os.path.join(os.path.dirname(__file__), "cep_rota.json")
+DB_PATH = os.path.join(os.path.dirname(__file__), "cep_rota.json")
 
-def load_cep_db():
-    with open(CEP_DB_PATH, "r", encoding="utf-8") as f:
+def _load():
+    with open(DB_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def save_cep_db(db: dict):
-    with open(CEP_DB_PATH, "w", encoding="utf-8") as f:
+def _save(db):
+    with open(DB_PATH, "w", encoding="utf-8") as f:
         json.dump(db, f, ensure_ascii=False, separators=(",", ":"))
 
-CEP_DB = load_cep_db()
+CEP_DB = _load()
 print(f"✅ Base carregada: {len(CEP_DB):,} CEPs")
 
-# ==================================================
-# OTIMIZAÇÃO: Cache de CEPs para busca instantânea
-# ==================================================
-# Cache com lookup sem formatação para busca mais rápida
-CEP_CACHE = {}
-for cep, rota in CEP_DB.items():
-    clean_cep = cep.replace("-", "")
-    CEP_CACHE[clean_cep] = {"cep": cep, "rota": rota}
-    CEP_CACHE[cep] = {"cep": cep, "rota": rota}
+# Cache duplo: com hífen e sem hífen
+CEP_CACHE: dict = {}
+for _cep, _rota in CEP_DB.items():
+    _clean = _cep.replace("-", "")
+    CEP_CACHE[_clean]  = {"cep": _cep, "rota": _rota}
+    CEP_CACHE[_cep]    = {"cep": _cep, "rota": _rota}
 
-def lookup_cep_instant(raw: str) -> dict | None:
-    """Busca CEP no cache - resposta instantânea O(1)"""
+def _lookup(raw: str):
     clean = re.sub(r"\D", "", raw)
     if len(clean) < 8:
         return None
     result = CEP_CACHE.get(clean)
     if result:
         return result
-    # Tenta com hífen
-    formatted = f"{clean[:5]}-{clean[5:8]}"
-    result = CEP_CACHE.get(formatted)
-    return result
+    fmt = f"{clean[:5]}-{clean[5:8]}"
+    return CEP_CACHE.get(fmt)
+
+def _add_to_cache(cep_fmt: str, rota: str):
+    clean = cep_fmt.replace("-", "")
+    CEP_CACHE[clean]   = {"cep": cep_fmt, "rota": rota}
+    CEP_CACHE[cep_fmt] = {"cep": cep_fmt, "rota": rota}
 
 # ==================================================
-# OCR OTIMIZADO PARA LEITURA RÁPIDA
+# 🔍  OCR — Gemini Vision
 # ==================================================
+_PROMPT = (
+    "Esta imagem contém um CEP brasileiro (formato NNNNN-NNN ou NNNNNNNN). "
+    "Pode estar impresso, manuscrito a caneta ou em etiqueta. "
+    "Extraia SOMENTE os 8 dígitos do CEP, sem texto extra, sem hífen, sem espaços. "
+    "Se não houver CEP visível, responda exatamente: NENHUM"
+)
 
-def preprocess_image_for_ocr(image_bytes):
-    """Pré-processa a imagem para melhorar a leitura do OCR (manuscrito, impresso)"""
-    # Converte bytes para imagem OpenCV
-    nparr = np.frombuffer(image_bytes, np.uint8)
-    img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    
-    if img is None:
+# Correções OCR comuns: letras confundíveis → dígitos
+_OCR_FIX = str.maketrans({
+    'O': '0', 'o': '0',
+    'I': '1', 'l': '1', 'i': '1',
+    'Z': '2', 'z': '2',
+    'S': '5', 's': '5',
+    'G': '6', 'g': '6',
+    'B': '8',
+    'q': '9',
+})
+
+def _fix_digits(text: str) -> str:
+    return text.translate(_OCR_FIX)
+
+def _extract_digits(text: str):
+    """Extrai 8 dígitos do texto OCR aplicando correções de letras."""
+    fixed  = _fix_digits(re.sub(r"[^0-9OoIilZzSsGgBbq]", "", text))
+    digits = re.sub(r"\D", "", fixed)
+    if len(digits) >= 8:
+        return digits[:8]
+    # Tenta padrão NNNNN[-]NNN no texto original
+    m = re.search(r"(\d{5})[-\s]?(\d{3})", text)
+    if m:
+        return m.group(1) + m.group(2)
+    return None
+
+def ocr_gemini(image_b64: str):
+    """Gemini Vision: retorna 8 dígitos ou None."""
+    if not GEMINI_API_KEY or "COLE_SUA" in GEMINI_API_KEY:
         return None
-    
-    # Converte para escala de cinza
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    
-    # Aplica threshold adaptativo para manuscrito
-    binary = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
-                                    cv2.THRESH_BINARY, 11, 2)
-    
-    # Aumenta contraste
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
-    enhanced = clahe.apply(gray)
-    
-    # Redimensiona para melhorar leitura
-    height, width = enhanced.shape
-    if width < 800:
-        scale = 800 / width
-        new_width = int(width * scale)
-        new_height = int(height * scale)
-        enhanced = cv2.resize(enhanced, (new_width, new_height), interpolation=cv2.INTER_CUBIC)
-        binary = cv2.resize(binary, (new_width, new_height), interpolation=cv2.INTER_CUBIC)
-    
-    return enhanced, binary
-
-def ocr_extract_cep(image_bytes):
-    """Extrai CEP da imagem usando OCR otimizado"""
     try:
-        start_time = time.time()
-        
-        # Pré-processa a imagem
-        enhanced, binary = preprocess_image_for_ocr(image_bytes)
-        if enhanced is None:
+        payload = {
+            "contents": [{
+                "parts": [
+                    {"text": _PROMPT},
+                    {"inline_data": {"mime_type": "image/jpeg", "data": image_b64}}
+                ]
+            }],
+            "generationConfig": {"temperature": 0, "maxOutputTokens": 32}
+        }
+        resp = requests.post(GEMINI_URL, json=payload, timeout=8)
+        if resp.status_code != 200:
+            print(f"  Gemini HTTP {resp.status_code}: {resp.text[:200]}")
             return None
-        
-        # Configuração otimizada do Tesseract
-        custom_config = r'--oem 3 --psm 8 -c tessedit_char_whitelist=0123456789-'
-        
-        # Tenta com a imagem melhorada
-        text = pytesseract.image_to_string(enhanced, config=custom_config, lang='por')
-        
-        # Se não achou, tenta com a imagem binarizada
-        if not text or len(text.strip()) < 6:
-            text = pytesseract.image_to_string(binary, config=custom_config, lang='por')
-        
-        # Extrai números da string
-        digits = re.sub(r'\D', '', text)
-        
-        # Valida se tem pelo menos 8 dígitos
-        if len(digits) >= 8:
-            cep = f"{digits[:5]}-{digits[5:8]}"
-            # Valida formato
-            if re.match(r'^\d{5}-\d{3}$', cep):
-                print(f"OCR detectou: {cep} (tempo: {(time.time()-start_time)*1000:.0f}ms)")
-                return cep
-        
-        # Tenta extrair usando regex direto
-        cep_pattern = r'\b(\d{5})[-\s]?(\d{3})\b'
-        match = re.search(cep_pattern, text)
-        if match:
-            cep = f"{match.group(1)}-{match.group(2)}"
-            print(f"OCR detectou (regex): {cep}")
-            return cep
-        
-        return None
-        
+        raw  = resp.json()
+        text = raw["candidates"][0]["content"]["parts"][0]["text"].strip()
+        print(f"  Gemini raw: {repr(text)}")
+        if "NENHUM" in text.upper():
+            return None
+        return _extract_digits(text)
     except Exception as e:
-        print(f"Erro OCR: {e}")
+        print(f"  Gemini erro: {e}")
         return None
 
+def ocr_tesseract(image_b64: str):
+    """Tesseract com vários pré-processamentos como fallback."""
+    try:
+        import cv2, numpy as np, pytesseract
+    except ImportError:
+        print("  Tesseract/OpenCV não instalados — pulando fallback")
+        return None
+    try:
+        arr = np.frombuffer(base64.b64decode(image_b64), np.uint8)
+        img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if img is None:
+            return None
+
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        h, w = gray.shape
+        if w < 900:
+            scale = 900 / w
+            gray  = cv2.resize(gray, (int(w * scale), int(h * scale)),
+                               interpolation=cv2.INTER_CUBIC)
+
+        versions = [
+            # CLAHE
+            cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8,8)).apply(gray),
+            # threshold adaptativo
+            cv2.adaptiveThreshold(gray, 255,
+                cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 15, 8),
+            # Otsu
+            cv2.threshold(gray, 0, 255,
+                cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1],
+        ]
+
+        cfgs = [
+            r"--oem 3 --psm 7 -c tessedit_char_whitelist=0123456789-",
+            r"--oem 3 --psm 6 -c tessedit_char_whitelist=0123456789-",
+        ]
+        for ver in versions:
+            for cfg in cfgs:
+                text   = pytesseract.image_to_string(ver, config=cfg, lang="por")
+                digits = _extract_digits(text)
+                if digits:
+                    print(f"  Tesseract achou: {digits}")
+                    return digits
+        return None
+    except Exception as e:
+        print(f"  Tesseract erro: {e}")
+        return None
+
+def ocr_pipeline(image_b64: str):
+    """1. Gemini Vision  2. Tesseract. Retorna 8 dígitos ou None."""
+    t0 = time.time()
+    d  = ocr_gemini(image_b64)
+    if d:
+        print(f"OCR Gemini OK {(time.time()-t0)*1000:.0f}ms → {d}")
+        return d
+    d = ocr_tesseract(image_b64)
+    if d:
+        print(f"OCR Tesseract OK {(time.time()-t0)*1000:.0f}ms → {d}")
+        return d
+    print(f"OCR falhou {(time.time()-t0)*1000:.0f}ms")
+    return None
+
 # ==================================================
-# FLASK APP
+# 🌐  FLASK
 # ==================================================
 app = Flask(__name__, static_folder="static")
 
@@ -162,180 +203,124 @@ def icon():
 def sw():
     return send_from_directory(".", "sw.js")
 
-# ==================================================
-# API — BUSCA DE CEP (INSTANTÂNEA)
-# ==================================================
-@app.route("/api/cep/<cep>")
-def api_cep(cep: str):
-    """Busca CEP no banco - resposta em milissegundos"""
-    result = lookup_cep_instant(cep)
-    if result:
-        return jsonify({"found": True, **result})
+# ── Busca CEP ─────────────────────────────────────
+@app.route("/api/cep/<path:cep>")
+def api_cep_get(cep: str):
+    r = _lookup(cep)
+    if r:
+        return jsonify({"found": True, **r})
     return jsonify({"found": False, "cep": cep}), 404
 
 @app.route("/api/cep", methods=["POST"])
 def api_cep_post():
-    data = request.get_json(silent=True) or {}
-    cep = data.get("cep", "")
-    result = lookup_cep_instant(cep)
-    if result:
-        return jsonify({"found": True, **result})
-    return jsonify({"found": False, "cep": cep}), 404
+    r = _lookup((request.get_json(silent=True) or {}).get("cep", ""))
+    if r:
+        return jsonify({"found": True, **r})
+    return jsonify({"found": False}), 404
 
-# ==================================================
-# API — OCR COM CÂMERA (OTIMIZADO)
-# ==================================================
+# ── OCR ───────────────────────────────────────────
 @app.route("/api/ocr", methods=["POST"])
 def api_ocr():
-    """
-    POST /api/ocr
-    Body: { "image": "<base64>" }
-    Retorna CEP detectado e rota
-    """
     data = request.get_json(silent=True) or {}
-    image_b64 = data.get("image", "")
-    
-    if not image_b64:
+    b64  = data.get("image", "")
+    if not b64:
         return jsonify({"error": "Imagem não enviada"}), 400
-    
-    # Remove header se existir
-    if "," in image_b64:
-        image_b64 = image_b64.split(",", 1)[1]
-    
+
+    if "," in b64:
+        b64 = b64.split(",", 1)[1]
+
     try:
-        # Decodifica base64 para bytes
-        image_bytes = base64.b64decode(image_b64)
-        
-        # Extrai CEP usando OCR
-        cep = ocr_extract_cep(image_bytes)
-        
-        if not cep:
-            return jsonify({"found": False, "cep": None, "message": "Não foi possível ler o CEP"}), 404
-        
-        # Busca no banco
-        result = lookup_cep_instant(cep)
-        
-        if result:
-            return jsonify({
-                "found": True,
-                "cep": result["cep"],
-                "rota": result["rota"]
-            })
-        else:
-            return jsonify({
-                "found": False,
-                "cep": cep,
-                "rota": None,
-                "message": "CEP não encontrado na base"
-            }), 404
-            
+        digits = ocr_pipeline(b64)
+        if not digits:
+            return jsonify({"found": False, "cep": None,
+                            "message": "CEP não identificado — tente nova foto"}), 404
+
+        cep_fmt = f"{digits[:5]}-{digits[5:8]}"
+        r       = _lookup(digits)
+        if r:
+            return jsonify({"found": True, "cep": r["cep"], "rota": r["rota"]})
+        return jsonify({"found": False, "cep": cep_fmt, "rota": None,
+                        "message": "CEP lido mas não consta na base"}), 404
+
     except Exception as e:
-        print(f"Erro no OCR: {e}")
+        print(f"Erro /api/ocr: {e}")
         return jsonify({"error": str(e)}), 500
 
-# ==================================================
-# API — ADMIN
-# ==================================================
-def check_auth() -> bool:
-    return (
-        request.headers.get("X-Master-Pass") == MASTER_PASS or
-        (request.get_json(silent=True) or {}).get("password") == MASTER_PASS
-    )
+# ── Admin ─────────────────────────────────────────
+def _auth():
+    body = request.get_json(silent=True) or {}
+    return (request.headers.get("X-Master-Pass") == MASTER_PASS or
+            body.get("password") == MASTER_PASS)
 
 @app.route("/api/admin/stats")
 def api_stats():
-    if not check_auth():
-        return jsonify({"error": "Não autorizado"}), 401
-    rotas = set(CEP_DB.values())
+    if not _auth(): return jsonify({"error": "Não autorizado"}), 401
     return jsonify({
-        "total_ceps": len(CEP_DB),
-        "total_rotas": len(rotas),
-        "rotas": sorted(rotas)
+        "total_ceps":  len(CEP_DB),
+        "total_rotas": len(set(CEP_DB.values())),
+        "rotas":       sorted(set(CEP_DB.values()))
     })
 
 @app.route("/api/admin/add", methods=["POST"])
-def api_add_cep():
-    if not check_auth():
-        return jsonify({"error": "Não autorizado"}), 401
+def api_add():
+    if not _auth(): return jsonify({"error": "Não autorizado"}), 401
     data = request.get_json(silent=True) or {}
-    cep = data.get("cep", "").strip()
+    d    = re.sub(r"\D", "", data.get("cep", ""))
     rota = str(data.get("rota", "")).strip()
-    
-    # Normaliza CEP
-    digits = re.sub(r"\D", "", cep)
-    if len(digits) != 8:
-        return jsonify({"error": "CEP inválido"}), 400
-    if not rota:
-        return jsonify({"error": "Rota inválida"}), 400
-    
-    cep_formatado = f"{digits[:5]}-{digits[5:8]}"
-    CEP_DB[cep_formatado] = rota
-    CEP_CACHE[digits] = {"cep": cep_formatado, "rota": rota}
-    CEP_CACHE[cep_formatado] = {"cep": cep_formatado, "rota": rota}
-    save_cep_db(CEP_DB)
-    return jsonify({"ok": True, "cep": cep_formatado, "rota": rota, "total": len(CEP_DB)})
+    if len(d) != 8 or not rota:
+        return jsonify({"error": "CEP ou rota inválidos"}), 400
+    fmt = f"{d[:5]}-{d[5:8]}"
+    CEP_DB[fmt] = rota
+    _add_to_cache(fmt, rota)
+    _save(CEP_DB)
+    return jsonify({"ok": True, "cep": fmt, "rota": rota, "total": len(CEP_DB)})
 
 @app.route("/api/admin/import", methods=["POST"])
 def api_import():
-    if not check_auth():
-        return jsonify({"error": "Não autorizado"}), 401
-    data = request.get_json(silent=True) or {}
-    records = data.get("data", [])
+    if not _auth(): return jsonify({"error": "Não autorizado"}), 401
+    records = (request.get_json(silent=True) or {}).get("data", [])
     added = 0
     for rec in records:
-        cep_raw = str(rec.get("cep", ""))
+        d    = re.sub(r"\D", "", str(rec.get("cep", "")))
         rota = str(rec.get("rota", "")).strip()
-        digits = re.sub(r"\D", "", cep_raw)
-        if len(digits) == 8 and rota:
-            cep_formatado = f"{digits[:5]}-{digits[5:8]}"
-            CEP_DB[cep_formatado] = rota
-            CEP_CACHE[digits] = {"cep": cep_formatado, "rota": rota}
-            CEP_CACHE[cep_formatado] = {"cep": cep_formatado, "rota": rota}
+        if len(d) == 8 and rota:
+            fmt = f"{d[:5]}-{d[5:8]}"
+            CEP_DB[fmt] = rota
+            _add_to_cache(fmt, rota)
             added += 1
-    if added:
-        save_cep_db(CEP_DB)
+    if added: _save(CEP_DB)
     return jsonify({"ok": True, "added": added, "total": len(CEP_DB)})
 
 @app.route("/api/admin/export")
 def api_export():
-    if not check_auth():
-        return jsonify({"error": "Não autorizado"}), 401
+    if not _auth(): return jsonify({"error": "Não autorizado"}), 401
     return jsonify(CEP_DB)
 
 @app.route("/api/admin/delete", methods=["POST"])
-def api_delete_cep():
-    if not check_auth():
-        return jsonify({"error": "Não autorizado"}), 401
-    data = request.get_json(silent=True) or {}
-    cep = data.get("cep", "").strip()
-    digits = re.sub(r"\D", "", cep)
-    if len(digits) != 8:
-        return jsonify({"error": "CEP inválido"}), 400
-    cep_formatado = f"{digits[:5]}-{digits[5:8]}"
-    if cep_formatado not in CEP_DB:
-        return jsonify({"error": "CEP não encontrado"}), 404
-    del CEP_DB[cep_formatado]
-    if digits in CEP_CACHE:
-        del CEP_CACHE[digits]
-    if cep_formatado in CEP_CACHE:
-        del CEP_CACHE[cep_formatado]
-    save_cep_db(CEP_DB)
-    return jsonify({"ok": True, "deleted": cep_formatado, "total": len(CEP_DB)})
+def api_delete():
+    if not _auth(): return jsonify({"error": "Não autorizado"}), 401
+    d = re.sub(r"\D", "", (request.get_json(silent=True) or {}).get("cep", ""))
+    if len(d) != 8: return jsonify({"error": "CEP inválido"}), 400
+    fmt = f"{d[:5]}-{d[5:8]}"
+    if fmt not in CEP_DB: return jsonify({"error": "CEP não encontrado"}), 404
+    del CEP_DB[fmt]
+    CEP_CACHE.pop(d,   None)
+    CEP_CACHE.pop(fmt, None)
+    _save(CEP_DB)
+    return jsonify({"ok": True, "deleted": fmt, "total": len(CEP_DB)})
 
 # ==================================================
-# INICIALIZAÇÃO
+# 🚀  MAIN
 # ==================================================
 if __name__ == "__main__":
     print(f"""
 ╔══════════════════════════════════════════════════════╗
 ║  🚚 Reis Log — LeitorRota PRO                        ║
 ║                                                      ║
-║  ✅ Base: {len(CEP_DB):,} CEPs carregados em cache           ║
-║  ✅ OCR otimizado para manuscrito e impresso        ║
-║  ✅ Resposta em milissegundos                       ║
+║  ✅ {len(CEP_DB):,} CEPs em cache (busca instantânea)       ║
+║  ✅ OCR: Gemini Vision + fallback Tesseract          ║
 ║                                                      ║
 ║  Interface: http://localhost:{PORT}                  ║
-║  API: http://localhost:{PORT}/api/cep/74080010      ║
 ╚══════════════════════════════════════════════════════╝
 """)
     app.run(host=HOST, port=PORT, debug=False, threaded=True)
