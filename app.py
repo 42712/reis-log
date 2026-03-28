@@ -25,12 +25,8 @@ GEMINI_URL = (
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
-# BANCO DE DADOS DE CEPs → ROTAS  (embutido, sem banco externo)
+# BANCO DE DADOS DE CEPs → ROTAS
 # ─────────────────────────────────────────────────────────────────────────────
-# Formato: { "74080-010": "119", "74350-200": "100", ... }
-# Cole aqui todos os CEPs do seu sistema original.
-# Este arquivo só tem os principais; importe mais pelo painel Admin.
-
 CEP_DB = {
     "74080-010":"119","74080-020":"119","74080-030":"119","74080-040":"119","74080-050":"119",
     "74080-060":"119","74080-070":"119","74080-080":"119","74080-090":"119","74080-100":"119",
@@ -672,6 +668,10 @@ def ask_gemini(image_b64: str, mime: str = "image/jpeg") -> str | None:
 @app.route("/")
 def index():
     return render_template("index.html")
+
+@app.route("/static/<path:filename>")
+def static_files(filename):
+    return send_from_directory("static", filename)
 
 @app.route("/api/scan", methods=["POST"])
 def api_scan():
