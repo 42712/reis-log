@@ -13,6 +13,7 @@
 <link rel="manifest" href="/manifest.json">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <title>Reis Log — LeitorRota</title>
 <style>
 :root{
@@ -364,147 +365,84 @@ select.field{cursor:pointer;}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
 
 /* ══════════════════════════════════
-   INSTALL BANNER (flutuante)
+   INSTALL BANNER — topo, estilo notificação
 ══════════════════════════════════ */
 #installBanner {
   position: fixed;
-  bottom: calc(16px + var(--safe-bot));
-  left: 12px; right: 12px;
+  top: 0; left: 0; right: 0;
   z-index: 9999;
-  background: var(--card);
-  border: 1.5px solid var(--accent);
-  border-radius: 18px;
-  box-shadow: 0 8px 40px rgba(0,0,0,.6), 0 0 0 1px rgba(245,166,35,.15);
-  padding: 14px 14px 14px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  transform: translateY(120%);
+  background: var(--surface);
+  border-bottom: 2px solid var(--accent);
+  box-shadow: 0 4px 24px rgba(0,0,0,.55);
+  padding: calc(var(--safe-top) + 8px) 12px 8px;
+  display: flex; align-items: center; gap: 10px;
+  transform: translateY(-110%);
   opacity: 0;
   transition: transform .4s cubic-bezier(.34,1.4,.64,1), opacity .3s;
   pointer-events: none;
 }
-#installBanner.show {
-  transform: translateY(0);
-  opacity: 1;
-  pointer-events: all;
-}
-#installBanner.hide {
-  transform: translateY(140%);
-  opacity: 0;
-  pointer-events: none;
-}
-.ib-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
+#installBanner.show { transform: translateY(0); opacity: 1; pointer-events: all; }
+#installBanner.hide { transform: translateY(-120%); opacity: 0; pointer-events: none; }
 .ib-icon {
-  width: 48px; height: 48px;
-  background: linear-gradient(135deg,#1a2540,#243050);
-  border-radius: 12px;
-  border: 1px solid var(--border2);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 1.6rem; flex-shrink: 0;
+  width: 38px; height: 38px; flex-shrink: 0;
+  border-radius: 9px; overflow: hidden; border: 1px solid var(--border2);
 }
+.ib-icon img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .ib-info { flex: 1; min-width: 0; }
-.ib-title {
-  font-family: var(--font-d);
-  font-size: 1.05rem;
-  letter-spacing: 2px;
-  color: var(--text);
-  white-space: nowrap;
+.ib-title { font-family: var(--font-d); font-size: .9rem; letter-spacing: 2px; color: var(--text); white-space: nowrap; }
+.ib-sub { font-size: .6rem; color: var(--text2); margin-top: 1px; }
+#btnInstallBanner {
+  flex-shrink: 0; padding: 8px 14px; border: none; border-radius: 9px;
+  background: linear-gradient(135deg, var(--accent) 0%, #e8920d 100%);
+  color: #000; font-family: var(--font-b); font-weight: 700;
+  font-size: .78rem; cursor: pointer;
+  box-shadow: 0 2px 10px var(--accent-glow);
+  transition: transform .15s, opacity .2s; white-space: nowrap;
 }
-.ib-sub {
-  font-size: .68rem;
-  color: var(--text2);
-  margin-top: 2px;
-}
+#btnInstallBanner:active { transform: scale(.93); }
+#btnInstallBanner:disabled { opacity: .4; cursor: default; }
 .ib-close {
-  width: 28px; height: 28px;
-  border-radius: 50%;
-  border: none;
-  background: var(--card2);
-  color: var(--text3);
-  font-size: .9rem;
-  cursor: pointer;
-  flex-shrink: 0;
+  flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%;
+  border: none; background: var(--card2); color: var(--text3);
+  font-size: .75rem; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  transition: background .15s;
 }
 .ib-close:active { background: var(--border2); }
-#btnInstallBanner {
-  width: 100%;
-  padding: 13px;
-  border: none;
-  border-radius: 12px;
-  background: linear-gradient(135deg, var(--accent) 0%, #e8920d 100%);
-  color: #000;
-  font-family: var(--font-b);
-  font-weight: 700;
-  font-size: .95rem;
-  letter-spacing: .5px;
-  cursor: pointer;
-  box-shadow: 0 4px 18px var(--accent-glow);
-  transition: transform .15s, opacity .15s;
-  display: flex; align-items: center; justify-content: center; gap: 8px;
-}
-#btnInstallBanner:active { transform: scale(.96); }
-#btnInstallBanner:disabled { opacity: .5; cursor: default; }
-
-/* iOS sheet */
 #iosBanner {
-  position: fixed;
-  bottom: calc(16px + var(--safe-bot));
-  left: 12px; right: 12px;
-  z-index: 9999;
-  background: var(--card);
-  border: 1.5px solid var(--border2);
-  border-radius: 18px;
-  box-shadow: 0 8px 40px rgba(0,0,0,.6);
-  padding: 16px;
-  display: flex; flex-direction: column; gap: 12px;
-  transform: translateY(120%);
-  opacity: 0;
-  transition: transform .4s cubic-bezier(.34,1.4,.64,1), opacity .3s;
-  pointer-events: none;
+  position: fixed; bottom: calc(16px + var(--safe-bot)); left: 12px; right: 12px;
+  z-index: 9999; background: var(--card); border: 1.5px solid var(--border2);
+  border-radius: 18px; box-shadow: 0 8px 40px rgba(0,0,0,.6);
+  padding: 16px; display: flex; flex-direction: column; gap: 12px;
+  transform: translateY(120%); opacity: 0;
+  transition: transform .4s cubic-bezier(.34,1.4,.64,1), opacity .3s; pointer-events: none;
 }
 #iosBanner.show { transform: translateY(0); opacity: 1; pointer-events: all; }
-.ios-b-title {
-  font-size: .68rem; letter-spacing: 2px; text-transform: uppercase;
-  color: var(--accent); text-align: center;
-}
+.ios-b-title { font-size: .68rem; letter-spacing: 2px; text-transform: uppercase; color: var(--accent); text-align: center; }
 .ios-b-steps { display: flex; flex-direction: column; gap: 9px; }
 .ios-b-step { display: flex; align-items: center; gap: 10px; }
 .ios-b-num {
   flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%;
-  background: var(--accent); color: #000;
-  font-weight: 700; font-size: .75rem;
+  background: var(--accent); color: #000; font-weight: 700; font-size: .75rem;
   display: flex; align-items: center; justify-content: center;
 }
 .ios-b-text { font-size: .82rem; color: var(--text); line-height: 1.4; }
 .ios-b-text strong { color: var(--accent); }
-.ios-b-close {
-  align-self: center;
-  font-size: .7rem; color: var(--text3);
-  cursor: pointer; text-decoration: underline; text-underline-offset: 3px;
-  padding: 4px 0;
-}
+.ios-b-close { align-self: center; font-size: .7rem; color: var(--text3); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; padding: 4px 0; }
 </style>
 </head>
 <body>
 
-<!-- ══════════ INSTALL BANNER (Android/Chrome) ══════════ -->
+<!-- ══════════ INSTALL BANNER — topo ══════════ -->
 <div id="installBanner">
-  <div class="ib-row">
-    <div class="ib-icon">📦</div>
-    <div class="ib-info">
-      <div class="ib-title">REIS LOG</div>
-      <div class="ib-sub">Instale o app — rápido e offline</div>
-    </div>
-    <button class="ib-close" onclick="dismissBanner()" aria-label="Fechar">✕</button>
+  <div class="ib-icon">
+    <img src="data:image/png;base64,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" alt="Reis Log">
   </div>
-  <button id="btnInstallBanner" disabled>⏳ Preparando...</button>
+  <div class="ib-info">
+    <div class="ib-title">REIS LOG</div>
+    <div class="ib-sub">Toque para instalar o aplicativo</div>
+  </div>
+  <button id="btnInstallBanner" disabled>⬇ Instalar</button>
+  <button class="ib-close" onclick="dismissBanner()" aria-label="Fechar">✕</button>
 </div>
 
 <!-- ══════════ IOS BANNER ══════════ -->
@@ -940,7 +878,7 @@ async function loadStats(){
     document.getElementById('stRotas').textContent=d.rotas||0;
     document.getElementById('stExtras').textContent=d.extras||0;
     document.getElementById('countLbl').textContent=(d.total||0).toLocaleString('pt-BR');
-    document.getElementById('scanFoot').textContent='BASE: '+(d.total||0).toLocaleString('pt-BR')+' CEPs · Gemini Vision';
+    document.getElementById('scanFoot').textContent='BASE: '+(d.total||0).toLocaleString('pt-BR')+' CEPs · OCR Local';
   }catch(e){document.getElementById('scanFoot').textContent='Erro ao carregar stats';}
 }
 
@@ -1033,46 +971,133 @@ function setCamStatus(msg,type){
 }
 
 // ═══════════════════════════════════════════════════════
-//  📸 CAPTURA + POST /api/scan → resultado imediato
+//  📸 CAPTURA + OCR LOCAL (Tesseract.js — sem API)
 // ═══════════════════════════════════════════════════════
-function captureFrame(fullImage = false){
-  const v=document.getElementById('videoEl');
-  const c=document.getElementById('canvasEl');
-  const vw=v.videoWidth, vh=v.videoHeight;
-  if(!vw||!vh) return null;
+
+// Worker Tesseract — iniciado uma vez, reutilizado em todos os scans
+let ocrWorker = null;
+let ocrReady  = false;
+
+async function initOCR() {
+  if (ocrWorker) return;
+  try {
+    ocrWorker = await Tesseract.createWorker('por', 1, {
+      workerPath:  'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
+      corePath:    'https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core.wasm.js',
+      langPath:    'https://tessdata.projectnaptha.com/4.0.0_best',
+    });
+    await ocrWorker.setParameters({
+      tessedit_char_whitelist: '0123456789-',  // só dígitos e traço = muito mais rápido
+      tessedit_pageseg_mode:   Tesseract.PSM.SPARSE_TEXT,
+    });
+    ocrReady = true;
+    document.getElementById('scanFoot').textContent =
+      'BASE: CEPs · OCR Local · Pronto';
+  } catch(e) {
+    console.warn('[OCR] init falhou:', e);
+  }
+}
+
+// Pré-processa canvas para máxima legibilidade pelo OCR
+function preprocessCanvas(canvas) {
+  const ctx = canvas.getContext('2d');
+  const id  = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const d   = id.data;
+
+  // 1. Escala de cinza
+  for (let i = 0; i < d.length; i += 4) {
+    const g = 0.299*d[i] + 0.587*d[i+1] + 0.114*d[i+2];
+    d[i] = d[i+1] = d[i+2] = g;
+  }
+
+  // 2. Calcular média para threshold adaptativo
+  let sum = 0;
+  for (let i = 0; i < d.length; i += 4) sum += d[i];
+  const avg = sum / (d.length / 4);
+
+  // 3. Binarização + contraste agressivo
+  for (let i = 0; i < d.length; i += 4) {
+    // Aumenta contraste antes do threshold
+    let v = ((d[i] - avg) * 2.2 + avg);
+    v = Math.max(0, Math.min(255, v));
+    // Threshold: pixels acima de 50% viram branco, abaixo viram preto
+    v = v > 128 ? 255 : 0;
+    d[i] = d[i+1] = d[i+2] = v;
+  }
+  ctx.putImageData(id, 0, 0);
+}
+
+function captureCanvas(fullImage = false) {
+  const v = document.getElementById('videoEl');
+  const c = document.getElementById('canvasEl');
+  const vw = v.videoWidth, vh = v.videoHeight;
+  if (!vw || !vh) return null;
 
   let sx, sy, sw, sh;
-  if(fullImage){
-    // Imagem completa como fallback
+  if (fullImage) {
     sx=0; sy=0; sw=vw; sh=vh;
   } else {
-    // Recorta a região do frame do CEP — margens mais generosas
+    // Região do frame do CEP
     sx = Math.floor(vw * 0.05);
     sy = Math.floor(vh * 0.22);
     sw = Math.floor(vw * 0.90);
     sh = Math.floor(vh * 0.44);
   }
 
-  const scale = Math.min(2.0, 1200 / Math.max(sw, sh));
+  // Escala 2x para melhorar leitura do OCR
+  const scale = Math.min(3.0, 1600 / Math.max(sw, sh));
   c.width  = Math.round(sw * scale);
   c.height = Math.round(sh * scale);
 
   const ctx = c.getContext('2d');
-  ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, c.width, c.height);
   ctx.drawImage(v, sx, sy, sw, sh, 0, 0, c.width, c.height);
 
-  // Boost de contraste para melhorar leitura de CEP
-  const id=ctx.getImageData(0,0,c.width,c.height), d=id.data;
-  let mn=255,mx=0;
-  for(let i=0;i<d.length;i+=4){const g=.299*d[i]+.587*d[i+1]+.114*d[i+2];if(g<mn)mn=g;if(g>mx)mx=g;}
-  const rng=(mx-mn)||1;
-  for(let i=0;i<d.length;i+=4)
-    for(let k=0;k<3;k++){
-      const s=((d[i+k]-mn)/rng)*255;
-      d[i+k]=Math.min(255,Math.max(0,Math.round((s-128)*1.7+128)));
-    }
-  ctx.putImageData(id,0,0);
-  return c.toDataURL('image/jpeg',0.88).split(',')[1];
+  preprocessCanvas(c);
+  return c;
+}
+
+// Extrai CEP do texto bruto do OCR com múltiplas estratégias
+function extractCEP(text) {
+  const clean = text.replace(/\s+/g, ' ').trim();
+
+  // Estratégia 1: formato padrão NNNNN-NNN
+  let m = clean.match(/\b(\d{5})-(\d{3})\b/);
+  if (m) return m[1] + '-' + m[2];
+
+  // Estratégia 2: 8 dígitos seguidos (sem traço)
+  m = clean.match(/\b(\d{8})\b/);
+  if (m) return m[1].slice(0,5) + '-' + m[1].slice(5);
+
+  // Estratégia 3: 8 dígitos com 1 caractere ruído no meio
+  m = clean.replace(/[^0-9]/g, '').match(/(\d{8})/);
+  if (m) return m[1].slice(0,5) + '-' + m[1].slice(5);
+
+  return null;
+}
+
+async function ocrScan(fullImage = false) {
+  if (!ocrReady) {
+    // Inicializa lazy se ainda não carregou
+    await initOCR();
+    if (!ocrReady) return { ok: false, error: 'OCR não inicializado' };
+  }
+
+  const canvas = captureCanvas(fullImage);
+  if (!canvas) return { ok: false, error: 'Câmera não pronta' };
+
+  const { data: { text } } = await ocrWorker.recognize(canvas);
+  const cep = extractCEP(text);
+
+  if (!cep) return { ok: false, error: 'Nenhum CEP detectado na imagem' };
+
+  // Consulta a base local via /api/lookup
+  const resp = await fetch('/api/lookup?cep=' + encodeURIComponent(cep));
+  const d    = await resp.json();
+
+  if (d.ok && d.rota) return { ok: true, cep: d.cep, rota: d.rota, aviso: d.aviso };
+  return { ok: true, cep: cep, rota: null, error: d.error || 'CEP não encontrado na base' };
 }
 
 async function tirarFoto(){
@@ -1081,34 +1106,23 @@ async function tirarFoto(){
 
   busy=true;
   const btn=document.getElementById('btnShoot');
-  btn.disabled=true;btn.className='btn-shoot busy';btn.textContent='⏳  ANALISANDO...';
-  setCamStatus('🤖 IA lendo o CEP...','loading');
-
-  // Pulso visual nos cantos do frame
+  btn.disabled=true;btn.className='btn-shoot busy';btn.textContent='⏳  LENDO CEP...';
+  setCamStatus('🔍 OCR lendo...','loading');
   document.querySelectorAll('.fc').forEach(c=>c.style.borderColor='#3b7ff5');
 
-  const b64=captureFrame(false);
-  if(!b64){
-    busy=false;resetBtnShoot();
-    setCamStatus('❌ Câmera não pronta','err');return;
-  }
-
   try{
-    // 1ª tentativa: imagem recortada do frame
-    let result = await callScanAPI(b64);
+    // 1ª tentativa: região do frame
+    let result = await ocrScan(false);
 
-    // 2ª tentativa automática: imagem completa se não achou CEP (não erro de API)
+    // 2ª tentativa: imagem completa se não achou CEP
     if(!result.ok && result.error==='Nenhum CEP detectado na imagem'){
       setCamStatus('🔍 Tentando imagem completa...','loading');
-      const b64Full = captureFrame(true);
-      if(b64Full){
-        result = await callScanAPI(b64Full);
-      }
+      result = await ocrScan(true);
     }
 
-    busy=false;resetBtnShoot();
+    busy=false; resetBtnShoot();
 
-    if(!result.ok||!result.cep){
+    if(!result.ok || !result.cep){
       document.querySelectorAll('.fc').forEach(c=>c.style.borderColor='var(--error)');
       setTimeout(()=>document.querySelectorAll('.fc').forEach(c=>c.style.borderColor='var(--accent)'),1500);
       setCamStatus('❌ '+(result.error||'CEP não encontrado'),'err');
@@ -1117,7 +1131,7 @@ async function tirarFoto(){
       return;
     }
 
-    // ✅ Sucesso — cantos verdes
+    // ✅ Sucesso
     document.querySelectorAll('.fc').forEach(c=>c.style.borderColor='var(--success)');
     setTimeout(()=>document.querySelectorAll('.fc').forEach(c=>c.style.borderColor='var(--accent)'),2000);
     setCamStatus('✅ CEP: '+result.cep,'ok');
@@ -1127,19 +1141,10 @@ async function tirarFoto(){
     if(result.rota) addHistory(result.cep,result.rota);
 
   }catch(e){
-    busy=false;resetBtnShoot();
-    setCamStatus('❌ Erro de rede','err');
+    busy=false; resetBtnShoot();
+    setCamStatus('❌ Erro OCR','err');
     showToast('Erro: '+e.message,'bad');
   }
-}
-
-async function callScanAPI(b64){
-  const resp=await fetch('/api/scan',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({image:b64,mime:'image/jpeg'})
-  });
-  return await resp.json();
 }
 
 function resetBtnShoot(){
@@ -1382,6 +1387,8 @@ loadCfg();
 loadHistory();
 loadStats();
 if('speechSynthesis' in window){speechSynthesis.onvoiceschanged=loadVoices;loadVoices();}
+// Pré-carrega o worker OCR em background para o primeiro scan ser rápido
+setTimeout(initOCR, 2000);
 </script>
 </body>
 </html>
