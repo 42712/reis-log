@@ -364,126 +364,168 @@ select.field{cursor:pointer;}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
 
 /* ══════════════════════════════════
-   INSTALL WALL
+   INSTALL BANNER (flutuante)
 ══════════════════════════════════ */
-#installWall{
-  position:fixed;inset:0;z-index:99999;
-  background:var(--bg);
-  display:flex;flex-direction:column;align-items:center;justify-content:center;
-  padding:32px 24px calc(32px + var(--safe-bot));
-  text-align:center;gap:0;
+#installBanner {
+  position: fixed;
+  bottom: calc(16px + var(--safe-bot));
+  left: 12px; right: 12px;
+  z-index: 9999;
+  background: var(--card);
+  border: 1.5px solid var(--accent);
+  border-radius: 18px;
+  box-shadow: 0 8px 40px rgba(0,0,0,.6), 0 0 0 1px rgba(245,166,35,.15);
+  padding: 14px 14px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transform: translateY(120%);
+  opacity: 0;
+  transition: transform .4s cubic-bezier(.34,1.4,.64,1), opacity .3s;
+  pointer-events: none;
 }
-#installWall.hidden{display:none;}
+#installBanner.show {
+  transform: translateY(0);
+  opacity: 1;
+  pointer-events: all;
+}
+#installBanner.hide {
+  transform: translateY(140%);
+  opacity: 0;
+  pointer-events: none;
+}
+.ib-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.ib-icon {
+  width: 48px; height: 48px;
+  background: linear-gradient(135deg,#1a2540,#243050);
+  border-radius: 12px;
+  border: 1px solid var(--border2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.6rem; flex-shrink: 0;
+}
+.ib-info { flex: 1; min-width: 0; }
+.ib-title {
+  font-family: var(--font-d);
+  font-size: 1.05rem;
+  letter-spacing: 2px;
+  color: var(--text);
+  white-space: nowrap;
+}
+.ib-sub {
+  font-size: .68rem;
+  color: var(--text2);
+  margin-top: 2px;
+}
+.ib-close {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: var(--card2);
+  color: var(--text3);
+  font-size: .9rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s;
+}
+.ib-close:active { background: var(--border2); }
+#btnInstallBanner {
+  width: 100%;
+  padding: 13px;
+  border: none;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--accent) 0%, #e8920d 100%);
+  color: #000;
+  font-family: var(--font-b);
+  font-weight: 700;
+  font-size: .95rem;
+  letter-spacing: .5px;
+  cursor: pointer;
+  box-shadow: 0 4px 18px var(--accent-glow);
+  transition: transform .15s, opacity .15s;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+#btnInstallBanner:active { transform: scale(.96); }
+#btnInstallBanner:disabled { opacity: .5; cursor: default; }
 
-.iw-logo{font-size:5rem;margin-bottom:8px;
-  animation:breathe 3s ease-in-out infinite;}
-.iw-brand{font-family:var(--font-d);font-size:2.2rem;letter-spacing:6px;
-  color:var(--accent);margin-bottom:4px;}
-.iw-sub{font-size:.6rem;letter-spacing:3px;text-transform:uppercase;
-  color:var(--text3);margin-bottom:28px;}
-
-.iw-card{background:var(--card);border:1px solid var(--border);
-  border-radius:var(--r);padding:20px 18px;width:100%;max-width:360px;
-  margin-bottom:20px;}
-.iw-card-title{font-size:.7rem;letter-spacing:2px;text-transform:uppercase;
-  color:var(--text3);margin-bottom:14px;}
-
-/* Android / botão nativo */
-#btnInstallAndroid{
-  width:100%;padding:16px;border-radius:var(--r-sm);border:none;
-  background:linear-gradient(135deg,var(--accent) 0%,#e8920d 100%);
-  color:#000;font-family:var(--font-b);font-weight:700;font-size:1rem;
-  letter-spacing:.5px;cursor:pointer;
-  box-shadow:0 4px 20px var(--accent-glow);
-  transition:transform .15s,box-shadow .15s;}
-#btnInstallAndroid:active{transform:scale(.96);box-shadow:none;}
-
-/* iOS / steps */
-.ios-steps{display:flex;flex-direction:column;gap:12px;text-align:left;}
-.ios-step{display:flex;align-items:center;gap:12px;}
-.ios-step-num{flex-shrink:0;width:28px;height:28px;border-radius:50%;
-  background:var(--accent);color:#000;font-weight:700;font-size:.85rem;
-  display:flex;align-items:center;justify-content:center;}
-.ios-step-text{font-size:.85rem;color:var(--text);line-height:1.4;}
-.ios-step-text strong{color:var(--accent);}
-.ios-arrow{font-size:1.3rem;margin-right:2px;vertical-align:middle;}
-
-/* skip link */
-.iw-skip{margin-top:16px;font-size:.72rem;color:var(--text3);
-  cursor:pointer;text-decoration:underline;text-underline-offset:3px;
-  display:none; /* revelado após 8s */}
-.iw-skip.visible{display:block;}
-
-.iw-hint{font-size:.65rem;color:var(--text3);margin-top:12px;line-height:1.6;}
+/* iOS sheet */
+#iosBanner {
+  position: fixed;
+  bottom: calc(16px + var(--safe-bot));
+  left: 12px; right: 12px;
+  z-index: 9999;
+  background: var(--card);
+  border: 1.5px solid var(--border2);
+  border-radius: 18px;
+  box-shadow: 0 8px 40px rgba(0,0,0,.6);
+  padding: 16px;
+  display: flex; flex-direction: column; gap: 12px;
+  transform: translateY(120%);
+  opacity: 0;
+  transition: transform .4s cubic-bezier(.34,1.4,.64,1), opacity .3s;
+  pointer-events: none;
+}
+#iosBanner.show { transform: translateY(0); opacity: 1; pointer-events: all; }
+.ios-b-title {
+  font-size: .68rem; letter-spacing: 2px; text-transform: uppercase;
+  color: var(--accent); text-align: center;
+}
+.ios-b-steps { display: flex; flex-direction: column; gap: 9px; }
+.ios-b-step { display: flex; align-items: center; gap: 10px; }
+.ios-b-num {
+  flex-shrink: 0; width: 24px; height: 24px; border-radius: 50%;
+  background: var(--accent); color: #000;
+  font-weight: 700; font-size: .75rem;
+  display: flex; align-items: center; justify-content: center;
+}
+.ios-b-text { font-size: .82rem; color: var(--text); line-height: 1.4; }
+.ios-b-text strong { color: var(--accent); }
+.ios-b-close {
+  align-self: center;
+  font-size: .7rem; color: var(--text3);
+  cursor: pointer; text-decoration: underline; text-underline-offset: 3px;
+  padding: 4px 0;
+}
 </style>
 </head>
 <body>
 
-<!-- ═══════════ INSTALL WALL ═══════════ -->
-<div id="installWall">
-  <div class="iw-logo">📦</div>
-  <div class="iw-brand">REIS LOG</div>
-  <div class="iw-sub">Leitor de Rota · v4.1</div>
-
-  <!-- Android: botão nativo -->
-  <div id="iwAndroid" class="iw-card" style="display:none">
-    <div class="iw-card-title">📲 Instale o aplicativo</div>
-    <button id="btnInstallAndroid">⬇ INSTALAR AGORA</button>
-    <div class="iw-hint">Instalação rápida, sem loja de apps.<br>Funciona offline após instalar.</div>
-  </div>
-
-  <!-- iOS: instruções manuais -->
-  <div id="iwIOS" class="iw-card" style="display:none">
-    <div class="iw-card-title">📲 Adicione à Tela de Início</div>
-    <div class="ios-steps">
-      <div class="ios-step">
-        <div class="ios-step-num">1</div>
-        <div class="ios-step-text">Toque no botão <strong><span class="ios-arrow">⎙</span> Compartilhar</strong> na barra do Safari</div>
-      </div>
-      <div class="ios-step">
-        <div class="ios-step-num">2</div>
-        <div class="ios-step-text">Role a lista e toque em <strong>«Adicionar à Tela de Início»</strong></div>
-      </div>
-      <div class="ios-step">
-        <div class="ios-step-num">3</div>
-        <div class="ios-step-text">Toque em <strong>«Adicionar»</strong> no canto superior direito</div>
-      </div>
+<!-- ══════════ INSTALL BANNER (Android/Chrome) ══════════ -->
+<div id="installBanner">
+  <div class="ib-row">
+    <div class="ib-icon">📦</div>
+    <div class="ib-info">
+      <div class="ib-title">REIS LOG</div>
+      <div class="ib-sub">Instale o app — rápido e offline</div>
     </div>
-    <div class="iw-hint" style="margin-top:14px">Abra o app pelo ícone na Tela de Início.</div>
+    <button class="ib-close" onclick="dismissBanner()" aria-label="Fechar">✕</button>
   </div>
-
-  <!-- Desktop / outros -->
-  <div id="iwGeneric" class="iw-card" style="display:none">
-    <div class="iw-card-title">📱 Use no celular</div>
-    <div class="ios-step-text" style="text-align:center;line-height:1.7">
-      Este app é otimizado para celular.<br>
-      Abra o link no <strong>Chrome</strong> ou <strong>Safari</strong> do seu smartphone
-      para instalar.
-    </div>
-  </div>
-
-  <!-- Fallback manual Android (menu ⋮) -->
-  <div id="iwManual" class="iw-card" style="display:none">
-    <div class="iw-card-title">📲 Instale pelo menu do Chrome</div>
-    <div class="ios-steps">
-      <div class="ios-step">
-        <div class="ios-step-num">1</div>
-        <div class="ios-step-text">Toque nos <strong>3 pontos ⋮</strong> no canto superior direito do Chrome</div>
-      </div>
-      <div class="ios-step">
-        <div class="ios-step-num">2</div>
-        <div class="ios-step-text">Toque em <strong>«Adicionar à tela inicial»</strong></div>
-      </div>
-      <div class="ios-step">
-        <div class="ios-step-num">3</div>
-        <div class="ios-step-text">Confirme tocando em <strong>«Adicionar»</strong></div>
-      </div>
-    </div>
-  </div>
-
-  <span class="iw-skip" id="iwSkip" onclick="skipInstall()">Continuar sem instalar</span>
+  <button id="btnInstallBanner" disabled>⏳ Preparando...</button>
 </div>
-<!-- ═══════════════════════════════════ -->
+
+<!-- ══════════ IOS BANNER ══════════ -->
+<div id="iosBanner">
+  <div class="ios-b-title">📲 Adicione à Tela de Início</div>
+  <div class="ios-b-steps">
+    <div class="ios-b-step">
+      <div class="ios-b-num">1</div>
+      <div class="ios-b-text">Toque em <strong>⎙ Compartilhar</strong> na barra do Safari</div>
+    </div>
+    <div class="ios-b-step">
+      <div class="ios-b-num">2</div>
+      <div class="ios-b-text">Toque em <strong>«Adicionar à Tela de Início»</strong></div>
+    </div>
+    <div class="ios-b-step">
+      <div class="ios-b-num">3</div>
+      <div class="ios-b-text">Toque em <strong>«Adicionar»</strong></div>
+    </div>
+  </div>
+  <div class="ios-b-close" onclick="document.getElementById('iosBanner').classList.remove('show')">Fechar</div>
+</div>
 
 
 <div class="toast" id="toast"></div>
@@ -1273,110 +1315,67 @@ async function askResetDB(){
 }
 
 
+
 // ═══════════════════════════════════════════════════════
 //  🔧 SERVICE WORKER
 // ═══════════════════════════════════════════════════════
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js', { scope: '/' })
-      .then(reg => console.log('[SW] ok, scope:', reg.scope))
+      .then(reg => console.log('[SW] ok:', reg.scope))
       .catch(err => console.warn('[SW] erro:', err));
   });
 }
 
 // ═══════════════════════════════════════════════════════
-//  📲 INSTALL WALL
+//  📲 INSTALL BANNER — banner flutuante
 // ═══════════════════════════════════════════════════════
 let deferredPrompt = null;
-let promptResolve  = null;
-// Promise que resolve quando beforeinstallprompt chegar
-const promptReady  = new Promise(res => { promptResolve = res; });
-
-// Captura o evento — pode chegar a qualquer momento
-window.addEventListener('beforeinstallprompt', e => {
-  e.preventDefault();
-  deferredPrompt = e;
-  if (promptResolve) { promptResolve(e); promptResolve = null; }
-});
 
 const isStandalone = () =>
   window.matchMedia('(display-mode: standalone)').matches ||
   window.navigator.standalone === true ||
   document.referrer.startsWith('android-app://');
 
-const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+const isIOS = () =>
+  /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
 
-function skipInstall() {
-  document.getElementById('installWall').classList.add('hidden');
-}
-
-window.addEventListener('appinstalled', () => {
-  document.getElementById('installWall').classList.add('hidden');
-});
-
-function initInstallWall() {
-  if (isStandalone()) {
-    document.getElementById('installWall').classList.add('hidden');
-    return;
-  }
-
-  const btn = document.getElementById('btnInstallAndroid');
-
+if (!isStandalone()) {
   if (isIOS()) {
-    // iOS: só instrução manual
-    document.getElementById('iwIOS').style.display = 'block';
-
+    setTimeout(() => {
+      document.getElementById('iosBanner').classList.add('show');
+    }, 1500);
   } else {
-    // Android / Chrome: mostra card com botão
-    document.getElementById('iwAndroid').style.display = 'block';
-    btn.textContent = '⏳ Preparando instalação...';
-    btn.disabled = true;
-
-    // Aguarda o evento (com timeout de 6s)
-    const timeout = new Promise(res => setTimeout(res, 6000, null));
-    Promise.race([promptReady, timeout]).then(result => {
-      if (result) {
-        // Evento chegou — ativa botão
-        btn.disabled = false;
-        btn.textContent = '⬇ INSTALAR AGORA';
-      } else {
-        // Timeout: browser não disparou (já instalado? outro browser?)
-        // Mostra instrução do menu
-        btn.disabled = false;
-        btn.textContent = '📋 Ver instruções';
-        btn.onclick = () => {
-          document.getElementById('iwAndroid').style.display = 'none';
-          document.getElementById('iwManual').style.display = 'block';
-        };
-        return; // não registra o onclick padrão
-      }
-    });
-
-    btn.addEventListener('click', async () => {
-      if (!deferredPrompt) return;
-      try {
-        await deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
-        deferredPrompt = null;
-        if (outcome === 'accepted') {
-          document.getElementById('installWall').classList.add('hidden');
-        } else {
-          showToast('Instalação cancelada — tente novamente', 'warn');
-        }
-      } catch(e) {
-        console.warn('Install prompt error:', e);
-        showToast('Use menu ⋮ → Adicionar à tela inicial', 'warn');
-      }
+    window.addEventListener('beforeinstallprompt', e => {
+      e.preventDefault();
+      deferredPrompt = e;
+      const btn = document.getElementById('btnInstallBanner');
+      btn.disabled = false;
+      btn.innerHTML = '⬇&nbsp; INSTALAR APLICATIVO';
+      setTimeout(() => {
+        document.getElementById('installBanner').classList.add('show');
+      }, 800);
+      btn.onclick = async () => {
+        try {
+          await deferredPrompt.prompt();
+          const { outcome } = await deferredPrompt.userChoice;
+          deferredPrompt = null;
+          if (outcome === 'accepted') dismissBanner();
+        } catch(err) { console.warn('Install error:', err); }
+      };
     });
   }
-
-  // Escape após 12s
-  setTimeout(() => {
-    document.getElementById('iwSkip').classList.add('visible');
-  }, 12000);
 }
 
-initInstallWall();
+window.addEventListener('appinstalled', () => dismissBanner());
+
+function dismissBanner() {
+  const b = document.getElementById('installBanner');
+  b.classList.remove('show');
+  b.classList.add('hide');
+}
+
+function skipInstall() {}
 
 // ── Init ──
 loadCfg();
