@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -872,25 +873,31 @@ function setCamStatus(msg,type){
 // ═══════════════════════════════════════════════════════
 //  📸 CAPTURA + POST /api/scan → resultado imediato
 // ═══════════════════════════════════════════════════════
-function captureFrame(){
+function captureFrame(fullImage = false){
   const v=document.getElementById('videoEl');
   const c=document.getElementById('canvasEl');
   const vw=v.videoWidth, vh=v.videoHeight;
   if(!vw||!vh) return null;
 
-  // Recorta exatamente a região do frame do CEP (9% cada lado, 28% top, 38% bottom)
-  const cx = Math.floor(vw * 0.09);
-  const cy = Math.floor(vh * 0.28);
-  const cw = Math.floor(vw * 0.82);
-  const ch = Math.floor(vh * 0.34);
+  let sx, sy, sw, sh;
+  if(fullImage){
+    // Imagem completa como fallback
+    sx=0; sy=0; sw=vw; sh=vh;
+  } else {
+    // Recorta a região do frame do CEP — margens mais generosas
+    sx = Math.floor(vw * 0.05);
+    sy = Math.floor(vh * 0.22);
+    sw = Math.floor(vw * 0.90);
+    sh = Math.floor(vh * 0.44);
+  }
 
-  const scale = Math.min(2.0, 900 / Math.max(cw, ch));
-  c.width  = Math.round(cw * scale);
-  c.height = Math.round(ch * scale);
+  const scale = Math.min(2.0, 1200 / Math.max(sw, sh));
+  c.width  = Math.round(sw * scale);
+  c.height = Math.round(sh * scale);
 
   const ctx = c.getContext('2d');
   ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);
-  ctx.drawImage(v, cx, cy, cw, ch, 0, 0, c.width, c.height);
+  ctx.drawImage(v, sx, sy, sw, sh, 0, 0, c.width, c.height);
 
   // Boost de contraste para melhorar leitura de CEP
   const id=ctx.getImageData(0,0,c.width,c.height), d=id.data;
@@ -900,10 +907,10 @@ function captureFrame(){
   for(let i=0;i<d.length;i+=4)
     for(let k=0;k<3;k++){
       const s=((d[i+k]-mn)/rng)*255;
-      d[i+k]=Math.min(255,Math.max(0,Math.round((s-128)*1.85+128)));
+      d[i+k]=Math.min(255,Math.max(0,Math.round((s-128)*1.7+128)));
     }
   ctx.putImageData(id,0,0);
-  return c.toDataURL('image/jpeg',0.82).split(',')[1];
+  return c.toDataURL('image/jpeg',0.88).split(',')[1];
 }
 
 async function tirarFoto(){
@@ -918,19 +925,24 @@ async function tirarFoto(){
   // Pulso visual nos cantos do frame
   document.querySelectorAll('.fc').forEach(c=>c.style.borderColor='#3b7ff5');
 
-  const b64=captureFrame();
+  const b64=captureFrame(false);
   if(!b64){
     busy=false;resetBtnShoot();
     setCamStatus('❌ Câmera não pronta','err');return;
   }
 
   try{
-    const resp=await fetch('/api/scan',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({image:b64,mime:'image/jpeg'})
-    });
-    const result=await resp.json();
+    // 1ª tentativa: imagem recortada do frame
+    let result = await callScanAPI(b64);
+
+    // 2ª tentativa automática: imagem completa se não achou CEP (não erro de API)
+    if(!result.ok && result.error==='Nenhum CEP detectado na imagem'){
+      setCamStatus('🔍 Tentando imagem completa...','loading');
+      const b64Full = captureFrame(true);
+      if(b64Full){
+        result = await callScanAPI(b64Full);
+      }
+    }
 
     busy=false;resetBtnShoot();
 
@@ -957,6 +969,15 @@ async function tirarFoto(){
     setCamStatus('❌ Erro de rede','err');
     showToast('Erro: '+e.message,'bad');
   }
+}
+
+async function callScanAPI(b64){
+  const resp=await fetch('/api/scan',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({image:b64,mime:'image/jpeg'})
+  });
+  return await resp.json();
 }
 
 function resetBtnShoot(){
