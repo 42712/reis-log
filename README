@@ -1,0 +1,113 @@
+# 📦 Reis Log — LeitorRota v4.1
+
+**Aplicativo PWA para leitura de CEP em etiquetas de entrega com IA (Gemini Vision)**
+
+> Câmera já aberta → 1 toque → rota na tela em segundos.
+
+---
+
+## 👨‍💻 Desenvolvedor
+
+**Marcos Duarte** — Desenvolvedor Sênior
+Projeto desenvolvido para Reis Log · Transporte e Logística
+
+---
+
+## 🚀 Fluxo do App
+
+```
+1. Abre o app  → câmera já ativa automaticamente
+2. Enquadra o CEP dentro do frame laranja
+3. Toca em  📸 TIRAR FOTO
+4. Python envia imagem ao Gemini Vision
+5. Gemini extrai o CEP da foto
+6. Python busca no banco (dict em memória — 0ms)
+7. Rota aparece na tela + fala em voz alta
+```
+
+---
+
+## 🗂️ Estrutura
+
+```
+reis-log/
+├── app.py              # Backend Flask — Gemini + banco de CEPs
+├── index.html          # Frontend PWA — câmera ao vivo + todas as abas
+├── extras.json         # CEPs extras admin (inicia vazio)
+├── requirements.txt
+├── Procfile
+├── render.yaml
+└── static/
+    ├── manifest.json
+    ├── icon-192.png
+    └── icon-512.png
+```
+
+---
+
+## ⚙️ Variáveis de Ambiente (Render)
+
+| Variável         | Obrigatória | Descrição                         |
+|------------------|-------------|-----------------------------------|
+| GEMINI_API_KEY   | ✅ Sim      | Chave da API Google Gemini Vision |
+| ADMIN_PASSWORD   | Recomendado | Senha do painel admin             |
+
+Obter chave: https://aistudio.google.com/app/apikey
+
+---
+
+## 💻 Rodando Localmente
+
+```bash
+pip install -r requirements.txt
+export GEMINI_API_KEY="sua_chave"
+export ADMIN_PASSWORD="sua_senha"
+python app.py
+# http://localhost:5000
+```
+
+---
+
+## 📱 Abas do App
+
+| Aba         | Função                                           |
+|-------------|--------------------------------------------------|
+| 📷 Câmera   | Câmera ao vivo → 1 toque → rota instantânea      |
+| ⌨️ Manual   | Digita o CEP e consulta                          |
+| 🕓 Histórico| Últimas 50 consultas salvas no dispositivo       |
+| ⚙️ Admin    | Adiciona/importa CEPs, exporta CSV               |
+
+---
+
+## 🔌 Endpoints
+
+| Método | Rota                  | Descrição                       |
+|--------|-----------------------|---------------------------------|
+| GET    | /                     | Serve o app                     |
+| POST   | /api/scan             | Imagem base64 → CEP + rota      |
+| GET    | /api/lookup?cep=...   | Busca manual                    |
+| GET    | /api/stats            | Estatísticas do banco           |
+| GET    | /health               | Health check                    |
+| POST   | /api/admin/add        | Adiciona CEPs (requer senha)    |
+| POST   | /api/admin/import     | Importa CSV (requer senha)      |
+| POST   | /api/admin/export     | Exporta CSV (requer senha)      |
+| POST   | /api/admin/reset      | Limpa extras (requer senha)     |
+
+### Resposta /api/scan
+```json
+{"ok": true,  "cep": "74350-200", "rota": "100"}
+{"ok": false, "error": "Nenhum CEP detectado na imagem"}
+```
+
+---
+
+## 🛠️ Stack
+
+- Python 3.11 / Flask 3.0 / Gunicorn
+- Google Gemini 2.0 Flash Vision
+- HTML5 / CSS3 / JavaScript (câmera via MediaDevices API)
+- Deploy: Render.com
+
+---
+
+*Reis Log v4.1 — Desenvolvido por **Marcos Duarte**, Desenvolvedor Sênior*
