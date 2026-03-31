@@ -1,4 +1,5 @@
 
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -458,6 +459,25 @@ select.field{cursor:pointer;}
       Este app é otimizado para celular.<br>
       Abra o link no <strong>Chrome</strong> ou <strong>Safari</strong> do seu smartphone
       para instalar.
+    </div>
+  </div>
+
+  <!-- Fallback manual Android (menu ⋮) -->
+  <div id="iwManual" class="iw-card" style="display:none">
+    <div class="iw-card-title">📲 Instale pelo menu do Chrome</div>
+    <div class="ios-steps">
+      <div class="ios-step">
+        <div class="ios-step-num">1</div>
+        <div class="ios-step-text">Toque nos <strong>3 pontos ⋮</strong> no canto superior direito do Chrome</div>
+      </div>
+      <div class="ios-step">
+        <div class="ios-step-num">2</div>
+        <div class="ios-step-text">Toque em <strong>«Adicionar à tela inicial»</strong></div>
+      </div>
+      <div class="ios-step">
+        <div class="ios-step-num">3</div>
+        <div class="ios-step-text">Confirme tocando em <strong>«Adicionar»</strong></div>
+      </div>
     </div>
   </div>
 
@@ -1254,88 +1274,109 @@ async function askResetDB(){
 
 
 // ═══════════════════════════════════════════════════════
-//  🔧 SERVICE WORKER — obrigatório para PWA installability
+//  🔧 SERVICE WORKER
 // ═══════════════════════════════════════════════════════
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js', { scope: '/' })
-      .then(reg => console.log('[SW] registrado, scope:', reg.scope))
-      .catch(err => console.warn('[SW] falhou:', err));
+      .then(reg => console.log('[SW] ok, scope:', reg.scope))
+      .catch(err => console.warn('[SW] erro:', err));
   });
 }
 
 // ═══════════════════════════════════════════════════════
-//  📲 INSTALL WALL — força instalação PWA
+//  📲 INSTALL WALL
 // ═══════════════════════════════════════════════════════
 let deferredPrompt = null;
+let promptResolve  = null;
+// Promise que resolve quando beforeinstallprompt chegar
+const promptReady  = new Promise(res => { promptResolve = res; });
 
-// Captura o evento do Chrome/Android ANTES de qualquer interação
+// Captura o evento — pode chegar a qualquer momento
 window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
   deferredPrompt = e;
+  if (promptResolve) { promptResolve(e); promptResolve = null; }
 });
 
-function isStandalone() {
-  return window.matchMedia('(display-mode: standalone)').matches
-      || window.navigator.standalone === true   // iOS Safari
-      || document.referrer.startsWith('android-app://');
-}
+const isStandalone = () =>
+  window.matchMedia('(display-mode: standalone)').matches ||
+  window.navigator.standalone === true ||
+  document.referrer.startsWith('android-app://');
 
-function isIOS() {
-  return /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
-}
-
-function isMobile() {
-  return /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
-}
-
-function showInstallWall() {
-  const wall = document.getElementById('installWall');
-
-  if (isIOS()) {
-    document.getElementById('iwIOS').style.display = 'block';
-  } else if (deferredPrompt || /android/i.test(navigator.userAgent)) {
-    document.getElementById('iwAndroid').style.display = 'block';
-    document.getElementById('btnInstallAndroid').addEventListener('click', async () => {
-      if (!deferredPrompt) {
-        // Chrome já mostrou o banner — orienta o usuário
-        showToast('Use o menu ⋮ → "Adicionar à tela inicial"', 'warn');
-        return;
-      }
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      deferredPrompt = null;
-      if (outcome === 'accepted') {
-        wall.classList.add('hidden');
-      }
-    });
-  } else {
-    // Desktop ou browser sem suporte a PWA
-    document.getElementById('iwGeneric').style.display = 'block';
-  }
-
-  // Mostra link "continuar sem instalar" após 8 segundos
-  setTimeout(() => {
-    document.getElementById('iwSkip').classList.add('visible');
-  }, 8000);
-}
+const isIOS = () => /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
 
 function skipInstall() {
   document.getElementById('installWall').classList.add('hidden');
 }
 
-// Ouve instalação concluída (Android) — some o wall automaticamente
 window.addEventListener('appinstalled', () => {
   document.getElementById('installWall').classList.add('hidden');
 });
 
-// ── Lógica de entrada ──
-// Se já está rodando como app instalado → pula o wall direto
-if (isStandalone()) {
-  document.getElementById('installWall').classList.add('hidden');
-} else {
-  showInstallWall();
+function initInstallWall() {
+  if (isStandalone()) {
+    document.getElementById('installWall').classList.add('hidden');
+    return;
+  }
+
+  const btn = document.getElementById('btnInstallAndroid');
+
+  if (isIOS()) {
+    // iOS: só instrução manual
+    document.getElementById('iwIOS').style.display = 'block';
+
+  } else {
+    // Android / Chrome: mostra card com botão
+    document.getElementById('iwAndroid').style.display = 'block';
+    btn.textContent = '⏳ Preparando instalação...';
+    btn.disabled = true;
+
+    // Aguarda o evento (com timeout de 6s)
+    const timeout = new Promise(res => setTimeout(res, 6000, null));
+    Promise.race([promptReady, timeout]).then(result => {
+      if (result) {
+        // Evento chegou — ativa botão
+        btn.disabled = false;
+        btn.textContent = '⬇ INSTALAR AGORA';
+      } else {
+        // Timeout: browser não disparou (já instalado? outro browser?)
+        // Mostra instrução do menu
+        btn.disabled = false;
+        btn.textContent = '📋 Ver instruções';
+        btn.onclick = () => {
+          document.getElementById('iwAndroid').style.display = 'none';
+          document.getElementById('iwManual').style.display = 'block';
+        };
+        return; // não registra o onclick padrão
+      }
+    });
+
+    btn.addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      try {
+        await deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        deferredPrompt = null;
+        if (outcome === 'accepted') {
+          document.getElementById('installWall').classList.add('hidden');
+        } else {
+          showToast('Instalação cancelada — tente novamente', 'warn');
+        }
+      } catch(e) {
+        console.warn('Install prompt error:', e);
+        showToast('Use menu ⋮ → Adicionar à tela inicial', 'warn');
+      }
+    });
+  }
+
+  // Escape após 12s
+  setTimeout(() => {
+    document.getElementById('iwSkip').classList.add('visible');
+  }, 12000);
 }
+
+initInstallWall();
 
 // ── Init ──
 loadCfg();
