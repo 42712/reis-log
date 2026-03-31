@@ -362,9 +362,110 @@ select.field{cursor:pointer;}
 ::-webkit-scrollbar{width:3px;}
 ::-webkit-scrollbar-track{background:transparent;}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+
+/* ══════════════════════════════════
+   INSTALL WALL
+══════════════════════════════════ */
+#installWall{
+  position:fixed;inset:0;z-index:99999;
+  background:var(--bg);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:32px 24px calc(32px + var(--safe-bot));
+  text-align:center;gap:0;
+}
+#installWall.hidden{display:none;}
+
+.iw-logo{font-size:5rem;margin-bottom:8px;
+  animation:breathe 3s ease-in-out infinite;}
+.iw-brand{font-family:var(--font-d);font-size:2.2rem;letter-spacing:6px;
+  color:var(--accent);margin-bottom:4px;}
+.iw-sub{font-size:.6rem;letter-spacing:3px;text-transform:uppercase;
+  color:var(--text3);margin-bottom:28px;}
+
+.iw-card{background:var(--card);border:1px solid var(--border);
+  border-radius:var(--r);padding:20px 18px;width:100%;max-width:360px;
+  margin-bottom:20px;}
+.iw-card-title{font-size:.7rem;letter-spacing:2px;text-transform:uppercase;
+  color:var(--text3);margin-bottom:14px;}
+
+/* Android / botão nativo */
+#btnInstallAndroid{
+  width:100%;padding:16px;border-radius:var(--r-sm);border:none;
+  background:linear-gradient(135deg,var(--accent) 0%,#e8920d 100%);
+  color:#000;font-family:var(--font-b);font-weight:700;font-size:1rem;
+  letter-spacing:.5px;cursor:pointer;
+  box-shadow:0 4px 20px var(--accent-glow);
+  transition:transform .15s,box-shadow .15s;}
+#btnInstallAndroid:active{transform:scale(.96);box-shadow:none;}
+
+/* iOS / steps */
+.ios-steps{display:flex;flex-direction:column;gap:12px;text-align:left;}
+.ios-step{display:flex;align-items:center;gap:12px;}
+.ios-step-num{flex-shrink:0;width:28px;height:28px;border-radius:50%;
+  background:var(--accent);color:#000;font-weight:700;font-size:.85rem;
+  display:flex;align-items:center;justify-content:center;}
+.ios-step-text{font-size:.85rem;color:var(--text);line-height:1.4;}
+.ios-step-text strong{color:var(--accent);}
+.ios-arrow{font-size:1.3rem;margin-right:2px;vertical-align:middle;}
+
+/* skip link */
+.iw-skip{margin-top:16px;font-size:.72rem;color:var(--text3);
+  cursor:pointer;text-decoration:underline;text-underline-offset:3px;
+  display:none; /* revelado após 8s */}
+.iw-skip.visible{display:block;}
+
+.iw-hint{font-size:.65rem;color:var(--text3);margin-top:12px;line-height:1.6;}
 </style>
 </head>
 <body>
+
+<!-- ═══════════ INSTALL WALL ═══════════ -->
+<div id="installWall">
+  <div class="iw-logo">📦</div>
+  <div class="iw-brand">REIS LOG</div>
+  <div class="iw-sub">Leitor de Rota · v4.1</div>
+
+  <!-- Android: botão nativo -->
+  <div id="iwAndroid" class="iw-card" style="display:none">
+    <div class="iw-card-title">📲 Instale o aplicativo</div>
+    <button id="btnInstallAndroid">⬇ INSTALAR AGORA</button>
+    <div class="iw-hint">Instalação rápida, sem loja de apps.<br>Funciona offline após instalar.</div>
+  </div>
+
+  <!-- iOS: instruções manuais -->
+  <div id="iwIOS" class="iw-card" style="display:none">
+    <div class="iw-card-title">📲 Adicione à Tela de Início</div>
+    <div class="ios-steps">
+      <div class="ios-step">
+        <div class="ios-step-num">1</div>
+        <div class="ios-step-text">Toque no botão <strong><span class="ios-arrow">⎙</span> Compartilhar</strong> na barra do Safari</div>
+      </div>
+      <div class="ios-step">
+        <div class="ios-step-num">2</div>
+        <div class="ios-step-text">Role a lista e toque em <strong>«Adicionar à Tela de Início»</strong></div>
+      </div>
+      <div class="ios-step">
+        <div class="ios-step-num">3</div>
+        <div class="ios-step-text">Toque em <strong>«Adicionar»</strong> no canto superior direito</div>
+      </div>
+    </div>
+    <div class="iw-hint" style="margin-top:14px">Abra o app pelo ícone na Tela de Início.</div>
+  </div>
+
+  <!-- Desktop / outros -->
+  <div id="iwGeneric" class="iw-card" style="display:none">
+    <div class="iw-card-title">📱 Use no celular</div>
+    <div class="ios-step-text" style="text-align:center;line-height:1.7">
+      Este app é otimizado para celular.<br>
+      Abra o link no <strong>Chrome</strong> ou <strong>Safari</strong> do seu smartphone
+      para instalar.
+    </div>
+  </div>
+
+  <span class="iw-skip" id="iwSkip" onclick="skipInstall()">Continuar sem instalar</span>
+</div>
+<!-- ═══════════════════════════════════ -->
+
 
 <div class="toast" id="toast"></div>
 
@@ -1150,6 +1251,80 @@ async function askResetDB(){
       showToast('Base resetada','warn');loadStats();
     }catch(e){showToast('Erro de rede','bad');}
   });
+}
+
+
+// ═══════════════════════════════════════════════════════
+//  📲 INSTALL WALL — força instalação PWA
+// ═══════════════════════════════════════════════════════
+let deferredPrompt = null;
+
+// Captura o evento do Chrome/Android ANTES de qualquer interação
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+});
+
+function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches
+      || window.navigator.standalone === true   // iOS Safari
+      || document.referrer.startsWith('android-app://');
+}
+
+function isIOS() {
+  return /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+}
+
+function isMobile() {
+  return /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
+}
+
+function showInstallWall() {
+  const wall = document.getElementById('installWall');
+
+  if (isIOS()) {
+    document.getElementById('iwIOS').style.display = 'block';
+  } else if (deferredPrompt || /android/i.test(navigator.userAgent)) {
+    document.getElementById('iwAndroid').style.display = 'block';
+    document.getElementById('btnInstallAndroid').addEventListener('click', async () => {
+      if (!deferredPrompt) {
+        // Chrome já mostrou o banner — orienta o usuário
+        showToast('Use o menu ⋮ → "Adicionar à tela inicial"', 'warn');
+        return;
+      }
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      if (outcome === 'accepted') {
+        wall.classList.add('hidden');
+      }
+    });
+  } else {
+    // Desktop ou browser sem suporte a PWA
+    document.getElementById('iwGeneric').style.display = 'block';
+  }
+
+  // Mostra link "continuar sem instalar" após 8 segundos
+  setTimeout(() => {
+    document.getElementById('iwSkip').classList.add('visible');
+  }, 8000);
+}
+
+function skipInstall() {
+  document.getElementById('installWall').classList.add('hidden');
+}
+
+// Ouve instalação concluída (Android) — some o wall automaticamente
+window.addEventListener('appinstalled', () => {
+  document.getElementById('installWall').classList.add('hidden');
+});
+
+// ── Lógica de entrada ──
+// Se já está rodando como app instalado → pula o wall direto
+if (isStandalone()) {
+  document.getElementById('installWall').classList.add('hidden');
+} else {
+  showInstallWall();
 }
 
 // ── Init ──
