@@ -1,0 +1,1347 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#080c18">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Reis Log">
+<link rel="manifest" href="/manifest.json">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<title>Reis Log — LeitorRota</title>
+<style>
+:root{
+  --bg:#080c18;--surface:#0f1526;--card:#141d30;--card2:#1a2540;
+  --border:#243050;--border2:#2e3d60;
+  --accent:#f5a623;--accent-dim:rgba(245,166,35,.15);--accent-glow:rgba(245,166,35,.35);
+  --success:#22d3a0;--success-dim:rgba(34,211,160,.15);--success-glow:rgba(34,211,160,.4);
+  --error:#f5525a;--error-dim:rgba(245,82,90,.15);
+  --blue:#3b7ff5;--blue-glow:rgba(59,127,245,.5);
+  --warn:#f59e0b;--text:#eef2ff;--text2:#8899bb;--text3:#4a5878;
+  --r:14px;--r-sm:10px;
+  --font-d:'Bebas Neue',cursive;--font-b:'DM Sans',sans-serif;
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bot:env(safe-area-inset-bottom,0px);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;overflow:hidden;}
+body{background:var(--bg);color:var(--text);font-family:var(--font-b);font-size:15px;
+  display:flex;flex-direction:column;max-width:480px;margin:0 auto;height:100dvh;}
+
+/* ── HEADER ── */
+.hdr{flex-shrink:0;background:var(--surface);border-bottom:1px solid var(--border);
+  padding:calc(10px + var(--safe-top)) 16px 10px;
+  display:flex;align-items:center;gap:12px;z-index:10;}
+.hdr-logo{height:40px;width:40px;object-fit:contain;border-radius:8px;flex-shrink:0;}
+.hdr-text{display:flex;flex-direction:column;line-height:1.1;}
+.hdr-title{font-family:var(--font-d);font-size:1.25rem;letter-spacing:3px;
+  display:flex;align-items:baseline;}
+.hdr-title .w1{color:var(--text2);}
+.hdr-title .sep{color:var(--border2);font-size:.8rem;margin:0 4px;}
+.hdr-title .w2{color:var(--accent);letter-spacing:4px;font-size:1.4rem;}
+.hdr-sub{font-size:.55rem;color:var(--text3);letter-spacing:2px;text-transform:uppercase;margin-top:2px;}
+.hdr-actions{margin-left:auto;display:flex;gap:6px;}
+.hbtn{width:36px;height:36px;border-radius:10px;border:1px solid var(--border);
+  background:var(--card);color:var(--text2);font-size:1rem;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;transition:all .2s;}
+.hbtn:active{transform:scale(.88);}
+.hbtn.active{border-color:var(--accent);color:var(--accent);background:var(--accent-dim);}
+
+/* ── BOTTOM NAV ── */
+.bottom-nav{flex-shrink:0;background:var(--surface);border-top:1px solid var(--border);
+  display:grid;grid-template-columns:repeat(4,1fr);
+  padding-bottom:var(--safe-bot);z-index:10;}
+.nav-item{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:8px 2px;cursor:pointer;gap:2px;transition:all .2s;position:relative;}
+.nav-item:active{transform:scale(.9);}
+.nav-icon{font-size:1.15rem;transition:transform .25s cubic-bezier(.34,1.56,.64,1);}
+.nav-label{font-size:.55rem;letter-spacing:.5px;text-transform:uppercase;
+  color:var(--text3);font-weight:700;transition:color .2s;}
+.nav-item.active .nav-icon{transform:translateY(-2px) scale(1.15);}
+.nav-item.active .nav-label{color:var(--accent);}
+.nav-item::before{content:'';position:absolute;top:0;left:20%;right:20%;height:2px;
+  background:var(--accent);border-radius:0 0 4px 4px;
+  transform:scaleX(0);transition:transform .25s cubic-bezier(.34,1.56,.64,1);}
+.nav-item.active::before{transform:scaleX(1);}
+
+/* ── PAGES ── */
+.pages{flex:1;overflow:hidden;position:relative;}
+.page{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;
+  padding:0;display:flex;flex-direction:column;
+  opacity:0;transform:translateY(12px);pointer-events:none;
+  transition:opacity .25s,transform .25s;-webkit-overflow-scrolling:touch;}
+.page.active{opacity:1;transform:translateY(0);pointer-events:all;}
+.page-inner{padding:16px 14px 24px;display:flex;flex-direction:column;gap:14px;flex:1;}
+
+/* ══════════════════════════════════
+   PAGE SCAN — câmera ao vivo
+══════════════════════════════════ */
+#page-scan{padding:0;}
+
+/* área de vídeo — ocupa o espaço disponível */
+.cam-area{position:relative;flex:1;background:#000;overflow:hidden;}
+#videoEl{width:100%;height:100%;object-fit:cover;display:block;}
+#canvasEl{display:none;}
+
+/* Placeholder enquanto câmera não iniciou */
+.cam-ph{position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:16px;
+  background:var(--surface);transition:opacity .4s;}
+.cam-ph.hidden{opacity:0;pointer-events:none;}
+.cam-ph-icon{font-size:4rem;animation:breathe 3s ease-in-out infinite;}
+@keyframes breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
+.cam-ph p{font-size:.85rem;color:var(--text2);text-align:center;
+  padding:0 32px;line-height:1.7;}
+.cam-ph strong{color:var(--accent);}
+
+/* ── FRAME DO CEP ── */
+.cep-frame{position:absolute;
+  /* largura 82%, altura 34% — proporção ideal para ler CEP */
+  left:9%; right:9%; top:28%; bottom:38%;
+  pointer-events:none;z-index:5;}
+
+/* sombra fora do frame */
+.cep-shadow-top   {position:absolute;left:-9vw;right:-9vw;bottom:100%;
+  height:100vh;background:rgba(0,0,0,.52);}
+.cep-shadow-bottom{position:absolute;left:-9vw;right:-9vw;top:100%;
+  height:100vh;background:rgba(0,0,0,.52);}
+.cep-shadow-left  {position:absolute;top:0;bottom:0;right:100%;
+  width:100vw;background:rgba(0,0,0,.52);}
+.cep-shadow-right {position:absolute;top:0;bottom:0;left:100%;
+  width:100vw;background:rgba(0,0,0,.52);}
+
+/* cantos do frame */
+.fc{position:absolute;width:26px;height:26px;
+  border-color:var(--accent);border-style:solid;
+  transition:border-color .3s;}
+.fc.tl{top:-1px;left:-1px;border-width:4px 0 0 4px;border-radius:6px 0 0 0;}
+.fc.tr{top:-1px;right:-1px;border-width:4px 4px 0 0;border-radius:0 6px 0 0;}
+.fc.bl{bottom:-1px;left:-1px;border-width:0 0 4px 4px;border-radius:0 0 0 6px;}
+.fc.br{bottom:-1px;right:-1px;border-width:0 4px 4px 0;border-radius:0 0 6px 0;}
+
+/* linha de scan animada */
+.scan-beam{position:absolute;inset:0;overflow:hidden;}
+.scan-beam::after{content:'';position:absolute;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,var(--accent) 35%,#fff 50%,var(--accent) 65%,transparent);
+  box-shadow:0 0 10px 3px var(--accent-glow);
+  animation:beam 2.4s ease-in-out infinite;}
+@keyframes beam{0%{top:3%}50%{top:94%}100%{top:3%}}
+
+/* label acima do frame */
+.frame-label{position:absolute;bottom:calc(100% + 10px);left:0;right:0;
+  text-align:center;font-size:.65rem;letter-spacing:2.5px;
+  text-transform:uppercase;color:var(--accent);
+  text-shadow:0 1px 4px rgba(0,0,0,.8);}
+
+/* status pill dentro da câmera */
+.cam-status{position:absolute;bottom:calc(0% - 36px);left:0;right:0;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  font-size:.68rem;letter-spacing:1.5px;text-transform:uppercase;
+  color:var(--text2);text-shadow:0 1px 4px rgba(0,0,0,.9);
+  transition:color .3s;}
+.cam-status.loading{color:#a8c5ff;}
+.cam-status.ok{color:var(--success);}
+.cam-status.err{color:var(--error);}
+.c-spin{width:13px;height:13px;border:2.5px solid rgba(59,127,245,.3);
+  border-top-color:var(--blue);border-radius:50%;
+  animation:spin .5s linear infinite;flex-shrink:0;display:none;}
+.cam-status.loading .c-spin{display:block;}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── BARRA INFERIOR DA CÂMERA ── */
+.cam-bar{flex-shrink:0;background:rgba(8,12,24,.95);
+  border-top:1px solid var(--border);
+  padding:12px 16px calc(10px + var(--safe-bot));
+  display:flex;flex-direction:column;gap:10px;}
+
+/* botão principal — TIRAR FOTO */
+.btn-shoot{width:100%;padding:18px;border:none;border-radius:var(--r);
+  font-family:var(--font-d);font-size:1.5rem;letter-spacing:3px;cursor:pointer;
+  background:linear-gradient(135deg,var(--blue),#1a56db);
+  color:#fff;box-shadow:0 6px 28px var(--blue-glow);
+  display:flex;align-items:center;justify-content:center;gap:12px;
+  transition:transform .15s cubic-bezier(.34,1.56,.64,1),opacity .15s;}
+.btn-shoot:active{transform:scale(.95);}
+.btn-shoot:disabled{opacity:.45;pointer-events:none;}
+.btn-shoot.busy{background:linear-gradient(135deg,#f59e0b,#d97706);
+  box-shadow:0 6px 28px rgba(245,158,11,.5);}
+
+/* linha câmera controls */
+.cam-controls{display:flex;gap:8px;}
+.btn-cam-toggle{flex:1;padding:12px;border:none;border-radius:var(--r-sm);
+  font-family:var(--font-d);font-size:.95rem;letter-spacing:1.5px;cursor:pointer;
+  background:var(--card2);color:var(--text2);border:1px solid var(--border2);
+  transition:all .15s;}
+.btn-cam-toggle:active{transform:scale(.95);}
+.btn-cam-toggle.on{background:rgba(245,82,90,.12);color:var(--error);border-color:var(--error);}
+.btn-flash{width:50px;height:50px;border-radius:var(--r-sm);
+  border:1px solid var(--border2);background:var(--card2);
+  color:var(--text2);font-size:1.1rem;cursor:pointer;
+  display:none;align-items:center;justify-content:center;transition:all .15s;}
+.btn-flash.show{display:flex;}
+.btn-flash.on{border-color:#fbbf24;color:#fbbf24;background:rgba(251,191,36,.1);}
+.btn-flash:active{transform:scale(.88);}
+
+/* ── RESULTADO ── */
+.result-wrap{overflow:hidden;max-height:0;
+  transition:max-height .4s cubic-bezier(.4,0,.2,1),opacity .3s;
+  opacity:0;margin:0 14px;}
+.result-wrap.open{max-height:380px;opacity:1;}
+.result-card{background:var(--card);border:2px solid var(--border);
+  border-radius:var(--r);padding:20px;display:flex;flex-direction:column;
+  gap:14px;text-align:center;transition:border-color .3s,box-shadow .3s;}
+.result-card.ok{border-color:var(--success);box-shadow:0 0 28px rgba(34,211,160,.2);}
+.result-card.err{border-color:var(--error);box-shadow:0 0 16px rgba(245,82,90,.15);}
+.res-lbl{font-size:.6rem;letter-spacing:2px;text-transform:uppercase;
+  color:var(--text3);margin-bottom:3px;}
+.res-cep{font-size:1rem;color:var(--text2);font-weight:500;letter-spacing:2px;}
+.res-rota{font-family:var(--font-d);font-size:clamp(5rem,22vw,8rem);
+  line-height:1;letter-spacing:4px;color:var(--success);
+  text-shadow:0 0 40px var(--success-glow);
+  animation:popIn .35s cubic-bezier(.34,1.56,.64,1);}
+@keyframes popIn{from{transform:scale(.6);opacity:0}to{transform:scale(1);opacity:1}}
+.res-rota.err-txt{font-size:1.4rem;color:var(--error);
+  letter-spacing:0;animation:none;text-shadow:none;}
+.speak-btn{padding:10px 20px;border-radius:10px;
+  border:1.5px solid var(--success);background:var(--success-dim);
+  color:var(--success);font-family:var(--font-b);font-size:.8rem;
+  font-weight:700;cursor:pointer;display:inline-flex;
+  align-items:center;gap:8px;margin:0 auto;transition:all .15s;}
+.speak-btn:active{background:var(--success);color:#000;transform:scale(.94);}
+
+/* scan foot */
+.scan-foot{font-size:.6rem;color:var(--text3);text-align:center;
+  letter-spacing:1px;padding:6px 0 0;flex-shrink:0;}
+
+/* ══════════════════════════════════
+   PÁGINAS SECUNDÁRIAS
+══════════════════════════════════ */
+.card{background:var(--card);border:1px solid var(--border);
+  border-radius:var(--r);padding:16px;display:flex;flex-direction:column;gap:12px;}
+.card-title{font-size:.62rem;letter-spacing:2px;text-transform:uppercase;
+  color:var(--accent);display:flex;align-items:center;gap:8px;}
+.result-wrap2{overflow:hidden;max-height:0;
+  transition:max-height .4s cubic-bezier(.4,0,.2,1),opacity .3s;opacity:0;}
+.result-wrap2.open{max-height:380px;opacity:1;}
+
+/* stats */
+.stats-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+.stat-box{background:var(--card);border:1px solid var(--border);
+  border-radius:var(--r-sm);padding:12px 8px;text-align:center;}
+.stat-num{font-family:var(--font-d);font-size:1.8rem;color:var(--accent);line-height:1;}
+.stat-lbl{font-size:.58rem;color:var(--text3);letter-spacing:1px;
+  text-transform:uppercase;margin-top:3px;}
+
+/* hist */
+.hist-item{background:var(--card);border:1px solid var(--border);
+  border-radius:var(--r-sm);padding:12px 14px;
+  display:flex;justify-content:space-between;align-items:center;
+  cursor:pointer;animation:fadeSlide .3s ease both;}
+@keyframes fadeSlide{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:translateX(0)}}
+.hist-item:active{transform:scale(.97);border-color:var(--accent);}
+.hist-cep{font-size:.85rem;color:var(--text2);}
+.hist-time{font-size:.65rem;color:var(--text3);margin-top:2px;}
+.hist-rota{font-family:var(--font-d);font-size:1.4rem;color:var(--text);}
+.empty-state{text-align:center;padding:40px 20px;color:var(--text3);font-size:.85rem;}
+
+/* inputs */
+.field-wrap{display:flex;flex-direction:column;gap:5px;}
+.field-lbl{font-size:.6rem;letter-spacing:1.5px;text-transform:uppercase;color:var(--text3);}
+.field{width:100%;background:var(--surface);border:1.5px solid var(--border);
+  border-radius:var(--r-sm);color:var(--text);font-family:var(--font-b);
+  font-size:1rem;padding:12px 14px;outline:none;
+  transition:border-color .2s,box-shadow .2s;-webkit-appearance:none;}
+.field:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(59,127,245,.15);}
+.field.cep-style{font-size:1.3rem;letter-spacing:3px;font-weight:700;}
+.field::placeholder{color:var(--text3);letter-spacing:1px;font-size:.9rem;}
+select.field{cursor:pointer;}
+
+/* result card shared */
+.rc{background:var(--card);border:2px solid var(--border);
+  border-radius:var(--r);padding:20px;display:flex;flex-direction:column;
+  gap:14px;text-align:center;transition:border-color .3s,box-shadow .3s;}
+.rc.ok{border-color:var(--success);box-shadow:0 0 24px rgba(34,211,160,.2);}
+.rc.err{border-color:var(--error);}
+
+/* buttons */
+.btn{flex:1;padding:14px 12px;border:none;border-radius:var(--r-sm);
+  font-family:var(--font-d);font-size:1.05rem;letter-spacing:1.5px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  transition:transform .15s cubic-bezier(.34,1.56,.64,1);}
+.btn:active{transform:scale(.93);}
+.btn:disabled{opacity:.38;pointer-events:none;}
+.btn-row{display:flex;gap:10px;}
+.btn-primary{background:linear-gradient(135deg,var(--accent),#e8920f);color:#000;
+  box-shadow:0 4px 14px var(--accent-glow);}
+.btn-success{background:linear-gradient(135deg,var(--success),#16a37a);color:#000;}
+.btn-danger{background:linear-gradient(135deg,var(--error),#d93c44);color:#fff;}
+.btn-blue-s{background:linear-gradient(135deg,var(--blue),#2563eb);color:#fff;}
+.btn-ghost{background:var(--card);color:var(--text2);border:1px solid var(--border);}
+.btn-sq{flex:none;width:52px;height:52px;padding:0;border-radius:var(--r-sm);}
+.btn-sm{padding:10px 14px;font-size:.85rem;border-radius:8px;}
+
+/* toggle */
+.toggle-row{display:flex;align-items:center;justify-content:space-between;
+  padding:12px 0;border-bottom:1px solid var(--border);}
+.toggle-row:last-child{border-bottom:none;}
+.toggle-info{flex:1;}
+.toggle-title{font-size:.9rem;font-weight:600;color:var(--text);}
+.toggle-desc{font-size:.72rem;color:var(--text3);margin-top:2px;}
+.switch{position:relative;width:48px;height:26px;flex-shrink:0;margin-left:12px;}
+.switch input{opacity:0;width:0;height:0;}
+.slider{position:absolute;inset:0;background:var(--border2);border-radius:13px;cursor:pointer;transition:background .25s;}
+.slider::before{content:'';position:absolute;width:20px;height:20px;left:3px;top:3px;
+  background:var(--text2);border-radius:50%;
+  transition:transform .25s cubic-bezier(.34,1.56,.64,1);}
+.switch input:checked+.slider{background:var(--accent);}
+.switch input:checked+.slider::before{transform:translateX(22px);background:#000;}
+
+/* tags/upload */
+.tags-area{display:flex;flex-wrap:wrap;gap:6px;min-height:40px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--r-sm);padding:8px;}
+.tag{display:inline-flex;align-items:center;gap:5px;background:var(--card2);
+  border:1px solid var(--border2);border-radius:6px;padding:4px 10px;
+  font-size:.75rem;color:var(--text);cursor:pointer;}
+.tag:active{border-color:var(--error);color:var(--error);}
+.upload-zone{border:2px dashed var(--border2);border-radius:var(--r);
+  padding:28px 20px;text-align:center;cursor:pointer;background:var(--surface);transition:all .2s;}
+.upload-zone:active,.upload-zone.drag{border-color:var(--accent);background:var(--accent-dim);}
+.upload-zone .uz-icon{font-size:2.5rem;margin-bottom:8px;}
+.upload-zone p{font-size:.8rem;color:var(--text2);line-height:1.6;}
+.import-notice{display:none;background:var(--success-dim);border:1px solid var(--success);
+  border-radius:var(--r-sm);padding:10px 14px;font-size:.82rem;color:var(--success);}
+.import-notice.show{display:block;}
+.import-notice.err{background:var(--error-dim);border-color:var(--error);color:var(--error);}
+
+/* modal */
+.modal-bg{position:fixed;inset:0;background:rgba(4,6,14,.92);backdrop-filter:blur(8px);
+  z-index:200;display:flex;align-items:flex-end;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity .25s;}
+.modal-bg.show{opacity:1;pointer-events:all;}
+.modal-sheet{width:100%;max-width:480px;background:var(--surface);
+  border-radius:24px 24px 0 0;border-top:1px solid var(--border);
+  padding:0 20px calc(20px + var(--safe-bot));transform:translateY(40px);
+  transition:transform .3s cubic-bezier(.4,0,.2,1);max-height:85vh;overflow-y:auto;}
+.modal-bg.show .modal-sheet{transform:translateY(0);}
+.modal-handle{width:40px;height:4px;background:var(--border2);border-radius:2px;margin:14px auto 20px;}
+.modal-title{font-family:var(--font-d);font-size:1.5rem;letter-spacing:2px;
+  margin-bottom:6px;display:flex;align-items:center;gap:10px;}
+.modal-sub{font-size:.8rem;color:var(--text2);margin-bottom:20px;line-height:1.6;}
+.modal-actions{display:flex;flex-direction:column;gap:10px;margin-top:20px;}
+.pass-wrap{position:relative;}
+.pass-wrap .field{padding-right:48px;}
+.eye-btn{position:absolute;right:12px;top:50%;transform:translateY(-50%);
+  background:none;border:none;color:var(--text3);font-size:1.2rem;cursor:pointer;padding:4px;}
+.pass-field{text-align:center;font-size:1.8rem;letter-spacing:8px;font-weight:700;}
+.pass-field.shake{animation:shake .4s ease;}
+@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-10px)}40%,80%{transform:translateX(10px)}}
+
+/* toast */
+.toast{position:fixed;bottom:calc(80px + var(--safe-bot));left:50%;
+  transform:translateX(-50%) translateY(20px);background:var(--card2);
+  border:1px solid var(--border2);color:var(--text);padding:10px 20px;
+  border-radius:20px;font-size:.8rem;font-weight:600;z-index:300;
+  opacity:0;transition:all .3s cubic-bezier(.34,1.56,.64,1);
+  white-space:nowrap;pointer-events:none;box-shadow:0 4px 24px rgba(0,0,0,.5);}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+.toast.ok{border-color:var(--success);color:var(--success);}
+.toast.bad{border-color:var(--error);color:var(--error);}
+.toast.warn{border-color:var(--warn);color:var(--warn);}
+
+.sec-title{font-size:.62rem;letter-spacing:2px;text-transform:uppercase;
+  color:var(--text3);display:flex;justify-content:space-between;align-items:center;}
+.link-btn{background:none;border:none;color:var(--text3);font-family:var(--font-b);
+  font-size:.68rem;cursor:pointer;text-decoration:underline;padding:0;}
+.foot-note{font-size:.62rem;color:var(--text3);text-align:center;letter-spacing:1px;padding:4px 0;}
+::-webkit-scrollbar{width:3px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px;}
+
+/* ══════════════════════════════════
+   INSTALL WALL
+══════════════════════════════════ */
+#installWall{
+  position:fixed;inset:0;z-index:99999;
+  background:var(--bg);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:32px 24px calc(32px + var(--safe-bot));
+  text-align:center;gap:0;
+}
+#installWall.hidden{display:none;}
+
+.iw-logo{font-size:5rem;margin-bottom:8px;
+  animation:breathe 3s ease-in-out infinite;}
+.iw-brand{font-family:var(--font-d);font-size:2.2rem;letter-spacing:6px;
+  color:var(--accent);margin-bottom:4px;}
+.iw-sub{font-size:.6rem;letter-spacing:3px;text-transform:uppercase;
+  color:var(--text3);margin-bottom:28px;}
+
+.iw-card{background:var(--card);border:1px solid var(--border);
+  border-radius:var(--r);padding:20px 18px;width:100%;max-width:360px;
+  margin-bottom:20px;}
+.iw-card-title{font-size:.7rem;letter-spacing:2px;text-transform:uppercase;
+  color:var(--text3);margin-bottom:14px;}
+
+/* Android / botão nativo */
+#btnInstallAndroid{
+  width:100%;padding:16px;border-radius:var(--r-sm);border:none;
+  background:linear-gradient(135deg,var(--accent) 0%,#e8920d 100%);
+  color:#000;font-family:var(--font-b);font-weight:700;font-size:1rem;
+  letter-spacing:.5px;cursor:pointer;
+  box-shadow:0 4px 20px var(--accent-glow);
+  transition:transform .15s,box-shadow .15s;}
+#btnInstallAndroid:active{transform:scale(.96);box-shadow:none;}
+
+/* iOS / steps */
+.ios-steps{display:flex;flex-direction:column;gap:12px;text-align:left;}
+.ios-step{display:flex;align-items:center;gap:12px;}
+.ios-step-num{flex-shrink:0;width:28px;height:28px;border-radius:50%;
+  background:var(--accent);color:#000;font-weight:700;font-size:.85rem;
+  display:flex;align-items:center;justify-content:center;}
+.ios-step-text{font-size:.85rem;color:var(--text);line-height:1.4;}
+.ios-step-text strong{color:var(--accent);}
+.ios-arrow{font-size:1.3rem;margin-right:2px;vertical-align:middle;}
+
+/* skip link */
+.iw-skip{margin-top:16px;font-size:.72rem;color:var(--text3);
+  cursor:pointer;text-decoration:underline;text-underline-offset:3px;
+  display:none; /* revelado após 8s */}
+.iw-skip.visible{display:block;}
+
+.iw-hint{font-size:.65rem;color:var(--text3);margin-top:12px;line-height:1.6;}
+</style>
+</head>
+<body>
+
+<!-- ═══════════ INSTALL WALL ═══════════ -->
+<div id="installWall">
+  <div class="iw-logo">📦</div>
+  <div class="iw-brand">REIS LOG</div>
+  <div class="iw-sub">Leitor de Rota · v4.1</div>
+
+  <!-- Android: botão nativo -->
+  <div id="iwAndroid" class="iw-card" style="display:none">
+    <div class="iw-card-title">📲 Instale o aplicativo</div>
+    <button id="btnInstallAndroid">⬇ INSTALAR AGORA</button>
+    <div class="iw-hint">Instalação rápida, sem loja de apps.<br>Funciona offline após instalar.</div>
+  </div>
+
+  <!-- iOS: instruções manuais -->
+  <div id="iwIOS" class="iw-card" style="display:none">
+    <div class="iw-card-title">📲 Adicione à Tela de Início</div>
+    <div class="ios-steps">
+      <div class="ios-step">
+        <div class="ios-step-num">1</div>
+        <div class="ios-step-text">Toque no botão <strong><span class="ios-arrow">⎙</span> Compartilhar</strong> na barra do Safari</div>
+      </div>
+      <div class="ios-step">
+        <div class="ios-step-num">2</div>
+        <div class="ios-step-text">Role a lista e toque em <strong>«Adicionar à Tela de Início»</strong></div>
+      </div>
+      <div class="ios-step">
+        <div class="ios-step-num">3</div>
+        <div class="ios-step-text">Toque em <strong>«Adicionar»</strong> no canto superior direito</div>
+      </div>
+    </div>
+    <div class="iw-hint" style="margin-top:14px">Abra o app pelo ícone na Tela de Início.</div>
+  </div>
+
+  <!-- Desktop / outros -->
+  <div id="iwGeneric" class="iw-card" style="display:none">
+    <div class="iw-card-title">📱 Use no celular</div>
+    <div class="ios-step-text" style="text-align:center;line-height:1.7">
+      Este app é otimizado para celular.<br>
+      Abra o link no <strong>Chrome</strong> ou <strong>Safari</strong> do seu smartphone
+      para instalar.
+    </div>
+  </div>
+
+  <span class="iw-skip" id="iwSkip" onclick="skipInstall()">Continuar sem instalar</span>
+</div>
+<!-- ═══════════════════════════════════ -->
+
+
+<div class="toast" id="toast"></div>
+
+<!-- MODAL PASSWORD -->
+<div class="modal-bg" id="passModal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="passModalTitle">🔒 Admin</div>
+    <div class="modal-sub" id="passModalSub">Digite a senha master.</div>
+    <div class="pass-wrap">
+      <input class="field pass-field" id="passInput" type="password" placeholder="••••••"
+        maxlength="30" onkeydown="if(event.key==='Enter')submitPass()">
+      <button class="eye-btn" onclick="togglePassVis()" id="eyeBtn">👁️</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="submitPass()">CONFIRMAR</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('passModal')">CANCELAR</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL CONFIRM -->
+<div class="modal-bg" id="confirmModal">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">⚠️ Confirmar</div>
+    <div style="background:var(--card);border:1px solid var(--error);border-radius:var(--r);padding:16px;">
+      <div id="confirmMsg" style="font-size:.9rem;color:var(--text);line-height:1.6;"></div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-danger" id="confirmYes">CONFIRMAR</button>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal('confirmModal')">CANCELAR</button>
+    </div>
+  </div>
+</div>
+
+<!-- HEADER -->
+<header class="hdr">
+  <img class="hdr-logo" src="data:image/jpeg;base64,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AEAAEAEEAEAAkHJOAIFjcsulAoEgCEEAEEEEAAEAAEAAAEAAEAAEAAEAAEAECxaKKVOVi9zA8NoAAEAAEAEAAEAAAEEAEEAEEAEEAEEABnS1EsRGF3HEg5EwAEEAEEAEAAEAAEAAEAAEAEEAEAAHzmaIBrZVUPghKEEAEEAEAAEAAEAAEAAAEAAEAAEAAEAEHyvpIFUblVdRaqsAAEAAEAAEAEAAEAAAEAAEAAEAAEDwRPnhkvjALuEhhGCvMNwAEAAEAAEAAEAAEAAEAAEAEECxD75DN3j7ekcFOhJ+HnAxzgEAAEAAEAAEAAAEAAEAAEACQwOhcwYUH4NGmY+IDEmEDywEAAEAEAAEAAAEAAEAAEAAEDwQwxS44Rwwwwg54o6wjzwEAAEAAEAAEAAEAAEAAEAEEAEAAEAAEAAEAAEAAEAAEAEEAEAAEAAEAAEAAAEAAEAAEAAEAEEAEAAEAAEAAEAAEAAEAAEAAEAEAAEAAEEEEEAEEAAEEAEEAEEAEAEEEEEEEAEEAAEEAEEAEEAEEAEAAEAAEAEEAEAAEACwAAEAAEAAEAAEAEEAEAAEAAEAAEAAAEAAEABQAAEAEEAEAAEAAEACAAAEABQAAEAAEAEAAEAAEEEEEAEwEEEEBwEAEEAEEEEEEEEEAEEAEEEAEEAEEAEEAEAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAEAAAAAAAAEAAAEAAEAEEAEEAEEAEAAEAAEAAEAAEAEEAAEAEEAEEAEAAAEEAEAAEAAEAAEAAEAAEAEEAEEAEAAEAAEAAEAAEAAEAD/8QAAv/aAAwDAQACAAMAAAAQ9s99s99M99M99c99c99U9sc8s99s99o99M99c99c99c99c99c99c9sc9s99s99s99M99c99c99c9sc9s99s99s99M999w9909909909409499499499w99w99099099094094998s88s98M99M89c89c89c9sc0s88s98s99M49c89c89c49c99c99c9sc9s99s99s99s99c99c99c99c9s99s99s99s999k99U99c99c94c9o99s99s99g99U99c99c99U9o99s990s80s90M40M49849c49cwsc0s80s90s40M48c49c49cw99999999999998V+99999999999999999999999999999998M98M94c9wc88iMcs88888+8898M94c94c98c9sd9s990s90s90M40M4kq9NldvD9q7z680s90s40M48c48c49cw9999999999999886J2ESTBK80pN2H+999999999999999994M94c9489wc8Exa4jPY4MnOzgb+RMw89wc90c9kc9k990890890s40c48lX1Ne6+9Tn/ADI9DYtOONPePPOPPOPfMPffffffffffffbV3L87q5avO2bImiZ+Ou/fffffffffffffeDPeHPcHPcHPOaGAo8MbaKM4gPAvFy5/cHPdHPZHfZPfdPfdPfdPeNPePfZTUFfg+vnZrQlHN36e9PaPPOPfePfYPffePfdPfdPfdPfdPePfKfcGoXkz6fhcPvfdPfdPePfePffeDPeHPcHPcHPZHPeM9qeffMbVef8ATL3L3Bz3Rz2T32T31z31z31z2xz2z32zxX9eFWtcCVfOZ1z2xz2j32z32z30z333D33D33T33T3jTzcfNM9l8RQ/XtX33T33T33T3jX3j333j33j32D32D3zrPTmItvcNWDtsv8Aw/8A/PcPfdPfdPfdPfXPfXPfXPbHPfMJnzsP1liokpdZO+o+kLvtLPfbPfbPfTPffcPfdPfdPfXPHxDycCwfGwQVgRyETKZDHNPfdPeNfePffbPfbPfaPfRPfPMMPPvvPMMMLLj/AL777zwz31z31z31z31z31z31z2xz2z32z32z30z31z31z31z2xz2z32z32z30z333D33T33T33T3jT3j33j33j33D33D33T33T33T3jX3j33yzzyz3wz30zz1zz1zz1z2xzSzzyz3yz30zj1zz1zz1zj1z31z31z2xz2z32z33z30z31z31z31z2xz2z32z32z30z333D31T33z33T3jT2j33j33j33z31T33z33T31T3j33j33SzzSz3TzjQzj3zj1zj1zixzSzzSz3Sz3Qzj1zj1zj1zj3z3333333333333333333331z3333333332z33333332z330z31z3hz3hz2xz2z32T32T30z30z3hz31z3xz2xz2z332Dz2D30D30D31z31z31z2Bz2Dz2D32D30D31z31z31z33/8QAPREAAQMCBAMEBwQJBQAAAAAAAgADBBIiAQUTMgYRQhAUQEMVIzNQUlNiFiByoiExNVRjc4CS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" alt="Reis Log">
+  <div class="hdr-text">
+    <div class="hdr-title">
+      <span class="w1">LEITOR</span><span class="sep">·</span><span class="w2">ROTA</span>
+    </div>
+    <div class="hdr-sub">Reis Log · Entregas</div>
+  </div>
+  <div class="hdr-actions">
+    <button class="hbtn" id="hbtnFlash" onclick="toggleFlash()" style="display:none">⚡</button>
+    <button class="hbtn" id="hbtnSettings" onclick="openSettings()">⚙️</button>
+  </div>
+</header>
+
+<!-- PAGES -->
+<div class="pages">
+
+  <!-- ══ PAGE: CÂMERA ══ -->
+  <div class="page active" id="page-scan">
+
+    <!-- Vídeo ao vivo -->
+    <div class="cam-area">
+
+      <!-- Placeholder -->
+      <div class="cam-ph" id="camPh">
+        <div class="cam-ph-icon">📦</div>
+        <p>Toque em <strong>ATIVAR CÂMERA</strong><br>
+           e depois em <strong>📸 TIRAR FOTO</strong></p>
+      </div>
+
+      <video id="videoEl" autoplay playsinline muted></video>
+      <canvas id="canvasEl"></canvas>
+
+      <!-- Frame do CEP -->
+      <div class="cep-frame" id="cepFrame" style="display:none">
+        <div class="cep-shadow-top"></div>
+        <div class="cep-shadow-bottom"></div>
+        <div class="cep-shadow-left"></div>
+        <div class="cep-shadow-right"></div>
+        <div class="fc tl"></div>
+        <div class="fc tr"></div>
+        <div class="fc bl"></div>
+        <div class="fc br"></div>
+        <div class="scan-beam"></div>
+        <div class="frame-label">Enquadre o CEP aqui</div>
+        <div class="cam-status" id="camStatus">
+          <div class="c-spin" id="camSpin"></div>
+          <span id="camStatusTxt">Pronto — toque em 📸</span>
+        </div>
+      </div>
+
+    </div><!-- /cam-area -->
+
+    <!-- Resultado aparece abaixo da câmera -->
+    <div class="result-wrap" id="resultWrap">
+      <div class="result-card" id="resultCard" style="margin-top:10px">
+        <div>
+          <div class="res-lbl">CEP DETECTADO</div>
+          <div class="res-cep" id="resCEP">—</div>
+        </div>
+        <div>
+          <div class="res-lbl">ROTA DE ENTREGA</div>
+          <div class="res-rota" id="resRota">—</div>
+        </div>
+        <button class="speak-btn" id="speakBtn" onclick="falarRota()" style="display:none">
+          🔊 OUVIR ROTA
+        </button>
+      </div>
+    </div>
+
+    <!-- Barra inferior da câmera -->
+    <div class="cam-bar">
+      <button class="btn-shoot" id="btnShoot" onclick="tirarFoto()" disabled>
+        📸 &nbsp;TIRAR FOTO
+      </button>
+      <div class="cam-controls">
+        <button class="btn-cam-toggle" id="btnCam" onclick="toggleCamera()">
+          📷 ATIVAR CÂMERA
+        </button>
+        <button class="btn-flash" id="btnFlash2" onclick="toggleFlash()">⚡</button>
+      </div>
+    </div>
+
+    <div class="scan-foot" id="scanFoot">Carregando base...</div>
+
+  </div><!-- /page-scan -->
+
+  <!-- ══ PAGE: MANUAL ══ -->
+  <div class="page" id="page-manual">
+    <div class="page-inner">
+      <div class="card">
+        <div class="card-title">🔍 Consulta Manual</div>
+        <div class="field-wrap">
+          <div class="field-lbl">CEP do pacote</div>
+          <div style="display:flex;gap:8px">
+            <input class="field cep-style" id="cepInput" type="text" placeholder="00000-000"
+              maxlength="9" inputmode="numeric"
+              oninput="formatCEP(this)" onkeydown="if(event.key==='Enter')buscarCEP()">
+            <button class="btn btn-primary btn-sq" onclick="buscarCEP()">🔍</button>
+          </div>
+        </div>
+      </div>
+      <div class="result-wrap2" id="resultWrap2">
+        <div class="rc" id="resultCard2">
+          <div><div class="res-lbl">CEP consultado</div><div class="res-cep" id="resCEP2">—</div></div>
+          <div><div class="res-lbl">ROTA DE ENTREGA</div><div class="res-rota" id="resRota2">—</div></div>
+          <button class="speak-btn" id="speakBtn2" onclick="falarRota2()" style="display:none">🔊 OUVIR ROTA</button>
+        </div>
+      </div>
+      <div class="foot-note">BASE: <span id="countLbl">...</span> CEPs</div>
+    </div>
+  </div>
+
+  <!-- ══ PAGE: HISTÓRICO ══ -->
+  <div class="page" id="page-history">
+    <div class="page-inner">
+      <div class="sec-title">📈 ÚLTIMAS CONSULTAS
+        <button class="link-btn" onclick="clearHistory()">limpar tudo</button>
+      </div>
+      <div id="histList"></div>
+      <div class="empty-state" id="histEmpty">
+        <div style="font-size:2.5rem;margin-bottom:10px;opacity:.5">📭</div>
+        Nenhuma consulta ainda.
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ PAGE: ADMIN ══ -->
+  <div class="page" id="page-admin">
+    <div class="page-inner">
+      <div class="stats-row">
+        <div class="stat-box"><div class="stat-num" id="stTotal">—</div><div class="stat-lbl">CEPs</div></div>
+        <div class="stat-box"><div class="stat-num" id="stRotas">—</div><div class="stat-lbl">Rotas</div></div>
+        <div class="stat-box"><div class="stat-num" id="stExtras">—</div><div class="stat-lbl">Extras</div></div>
+      </div>
+      <div class="card">
+        <div class="card-title">➕ Adicionar CEP manual</div>
+        <div style="display:grid;grid-template-columns:1fr 90px auto;gap:8px;align-items:end">
+          <div class="field-wrap">
+            <div class="field-lbl">CEP</div>
+            <input class="field" id="newCEP" type="text" placeholder="00000-000"
+              maxlength="9" inputmode="numeric" oninput="formatCEP(this)"
+              onkeydown="if(event.key==='Enter')document.getElementById('newRota').focus()">
+          </div>
+          <div class="field-wrap">
+            <div class="field-lbl">Rota</div>
+            <input class="field" id="newRota" type="text" placeholder="000"
+              maxlength="6" onkeydown="if(event.key==='Enter')addManual()">
+          </div>
+          <button class="btn btn-primary btn-sq" onclick="addManual()" style="margin-top:17px">+</button>
+        </div>
+        <div>
+          <div class="field-lbl" style="margin-bottom:6px">Pendentes:</div>
+          <div class="tags-area" id="tagsArea">
+            <span style="color:var(--text3);font-size:.75rem;margin:auto">Nenhum pendente</span>
+          </div>
+        </div>
+        <button class="btn btn-success" id="btnSaveManu" onclick="saveManual()" disabled>💾 SALVAR</button>
+      </div>
+      <div class="card">
+        <div class="card-title">📥 Importar CSV / Excel</div>
+        <div class="upload-zone" id="uploadZone"
+          onclick="document.getElementById('fileInput').click()"
+          ondragover="event.preventDefault();this.classList.add('drag')"
+          ondragleave="this.classList.remove('drag')"
+          ondrop="handleDrop(event)">
+          <div class="uz-icon">📂</div>
+          <p>Toque para selecionar<br><strong>.xlsx</strong> ou <strong>.csv</strong><br>
+            <span style="font-size:.72rem;color:var(--text3)">Colunas: CEP e ROTA</span></p>
+        </div>
+        <input type="file" id="fileInput" accept=".xlsx,.xls,.csv"
+          style="display:none" onchange="handleFile(this.files[0])">
+        <div class="import-notice" id="importNotice"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">🛠️ Ferramentas</div>
+        <div class="btn-row">
+          <button class="btn btn-blue-s btn-sm" onclick="exportCSV()">⬇️ EXPORTAR CSV</button>
+          <button class="btn btn-danger btn-sm" onclick="askResetDB()">🗑️ RESETAR EXTRAS</button>
+        </div>
+      </div>
+      <button class="btn btn-ghost" onclick="askLogout()">🔒 SAIR DO ADMIN</button>
+      <div class="foot-note">Reis Log v4.1 — Python/Flask + Gemini Vision</div>
+    </div>
+  </div>
+
+  <!-- ══ PAGE: CONFIG ══ -->
+  <div class="page" id="page-config">
+    <div class="page-inner">
+      <div class="card">
+        <div class="card-title">📷 Câmera</div>
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-title">Câmera traseira</div>
+            <div class="toggle-desc">Recomendado para leitura</div>
+          </div>
+          <label class="switch"><input type="checkbox" id="cfgRearCam" checked onchange="saveCfg()"><span class="slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <div class="toggle-title">Alta resolução</div>
+            <div class="toggle-desc">Melhor leitura, mais dados</div>
+          </div>
+          <label class="switch"><input type="checkbox" id="cfgHiRes" checked onchange="saveCfg()"><span class="slider"></span></label>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title">🔊 Voz</div>
+        <div class="toggle-row">
+          <div class="toggle-info"><div class="toggle-title">Falar rota automaticamente</div></div>
+          <label class="switch"><input type="checkbox" id="cfgAutoSpeak" checked onchange="saveCfg()"><span class="slider"></span></label>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-info"><div class="toggle-title">Vibrar ao encontrar</div></div>
+          <label class="switch"><input type="checkbox" id="cfgVibrate" checked onchange="saveCfg()"><span class="slider"></span></label>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-ghost btn-sm" style="flex:1" onclick="setVoiceGender('f')">👩 FEMININA</button>
+          <button class="btn btn-ghost btn-sm" style="flex:1" onclick="setVoiceGender('m')">👨 MASCULINA</button>
+        </div>
+        <div class="field-wrap">
+          <div class="field-lbl">Voz</div>
+          <select class="field" id="cfgVoice" onchange="saveCfg()"><option value="">Padrão</option></select>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="speak('Rota 1 0 0')">▶ TESTAR VOZ</button>
+      </div>
+      <div class="card">
+        <div class="card-title">🔑 Segurança</div>
+        <button class="btn btn-ghost btn-sm" onclick="askChangePass()">🔑 ALTERAR SENHA ADMIN</button>
+      </div>
+      <div class="foot-note">Reis Log v4.1 — Motor: Gemini 2.0 Flash Vision</div>
+    </div>
+  </div>
+
+</div><!-- /pages -->
+
+<!-- BOTTOM NAV -->
+<nav class="bottom-nav">
+  <div class="nav-item active" data-tab="scan"    onclick="switchTab('scan')">   <div class="nav-icon">📷</div><div class="nav-label">Câmera</div></div>
+  <div class="nav-item"        data-tab="manual"  onclick="switchTab('manual')"> <div class="nav-icon">⌨️</div> <div class="nav-label">Manual</div></div>
+  <div class="nav-item"        data-tab="history" onclick="switchTab('history')"><div class="nav-icon">🕓</div> <div class="nav-label">Histórico</div></div>
+  <div class="nav-item"        data-tab="admin"   onclick="switchTab('admin')">  <div class="nav-icon">⚙️</div> <div class="nav-label">Admin</div></div>
+</nav>
+
+<script>
+// ═══════════════════════════════════════════════════════
+//  REIS LOG v4.1
+//  Câmera ao vivo (getUserMedia) — 1 toque → resultado
+//  Processamento: 100% Python/Flask + Gemini Vision
+// ═══════════════════════════════════════════════════════
+
+// ── Config ──
+let CFG = { rearCam:true, hiRes:true, autoSpeak:true, vibrate:true, voice:'' };
+function loadCfg() {
+  try { Object.assign(CFG, JSON.parse(localStorage.getItem('rotaCfg')||'{}')); } catch(e) {}
+  document.getElementById('cfgRearCam').checked   = CFG.rearCam;
+  document.getElementById('cfgHiRes').checked     = CFG.hiRes;
+  document.getElementById('cfgAutoSpeak').checked = CFG.autoSpeak;
+  document.getElementById('cfgVibrate').checked   = CFG.vibrate;
+}
+function saveCfg() {
+  CFG.rearCam   = document.getElementById('cfgRearCam').checked;
+  CFG.hiRes     = document.getElementById('cfgHiRes').checked;
+  CFG.autoSpeak = document.getElementById('cfgAutoSpeak').checked;
+  CFG.vibrate   = document.getElementById('cfgVibrate').checked;
+  CFG.voice     = document.getElementById('cfgVoice').value;
+  localStorage.setItem('rotaCfg', JSON.stringify(CFG));
+}
+
+// ── Voz ──
+function loadVoices() {
+  const sel = document.getElementById('cfgVoice');
+  const vs  = speechSynthesis.getVoices().filter(v=>v.lang.startsWith('pt'));
+  sel.innerHTML = '<option value="">Padrão</option>';
+  vs.forEach(v=>{
+    const o=document.createElement('option');
+    o.value=v.name;
+    o.textContent=(/luciana|ana|maria|julia|female/i.test(v.name)?'👩':'👨')+' '+v.name;
+    if(v.name===CFG.voice) o.selected=true;
+    sel.appendChild(o);
+  });
+}
+function setVoiceGender(g){
+  const vs=speechSynthesis.getVoices().filter(v=>v.lang.startsWith('pt'));
+  if(!vs.length) return showToast('Sem vozes PT','bad');
+  const pick=g==='f'
+    ?(vs.find(v=>/luciana|ana|maria|julia|female/i.test(v.name))||vs[0])
+    :(vs.find(v=>/male|masculin|ricardo|daniel/i.test(v.name))||vs[vs.length-1]);
+  if(pick){CFG.voice=pick.name;document.getElementById('cfgVoice').value=pick.name;saveCfg();showToast((g==='f'?'👩':'👨')+' '+pick.name,'ok');setTimeout(()=>speak('Rota 1 0 0'),300);}
+}
+function speak(text){
+  if(!('speechSynthesis' in window)) return;
+  speechSynthesis.cancel();
+  const utt=new SpeechSynthesisUtterance(text);
+  utt.lang='pt-BR';utt.rate=0.9;utt.pitch=1.1;
+  const all=speechSynthesis.getVoices();
+  if(CFG.voice){const v=all.find(v=>v.name===CFG.voice);if(v)utt.voice=v;}
+  else{const pt=all.filter(v=>v.lang.startsWith('pt'));if(pt.length)utt.voice=pt[0];}
+  speechSynthesis.speak(utt);
+}
+function falarRota() {const t=document.getElementById('resRota').textContent.trim();if(t&&t!=='—')speak('Rota '+t.split('').join(' '));}
+function falarRota2(){const t=document.getElementById('resRota2').textContent.trim();if(t&&t!=='—')speak('Rota '+t.split('').join(' '));}
+
+// ── Tabs ──
+let currentTab='scan',prevTab='scan',adminUnlocked=false;
+function switchTab(id){
+  if(id==='admin'){requireAdmin(()=>activateTab('admin'));return;}
+  activateTab(id);
+}
+function activateTab(id){
+  currentTab=id;
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.tab===id));
+  document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id==='page-'+id));
+  if(id!=='scan'&&stream) stopCamera();
+  const hbtn=document.getElementById('hbtnSettings');
+  if(hbtn&&id!=='config') hbtn.classList.remove('active');
+  if(id==='admin') loadStats();
+}
+function openSettings(){
+  if(currentTab==='config'){
+    activateTab(prevTab);
+    document.getElementById('hbtnSettings').classList.remove('active');
+  } else {
+    prevTab=currentTab;activateTab('config');
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    document.getElementById('hbtnSettings').classList.add('active');
+  }
+}
+
+// ── Auth ──
+let passCallback=null,passMode='verify',ADMIN_PASS='';
+function requireAdmin(cb){if(adminUnlocked){cb();return;}requirePass('🔒 Painel Admin','Digite a senha master.',cb);}
+function requirePass(title,sub,cb){
+  passCallback=cb;passMode='verify';
+  document.getElementById('passModalTitle').textContent=title;
+  document.getElementById('passModalSub').textContent=sub;
+  const inp=document.getElementById('passInput');inp.value='';inp.type='password';
+  document.getElementById('eyeBtn').textContent='👁️';
+  openModal('passModal');setTimeout(()=>inp.focus(),350);
+}
+function submitPass(){
+  const val=document.getElementById('passInput').value;
+  if(passMode==='verify'){ADMIN_PASS=val;adminUnlocked=true;closeModal('passModal');if(passCallback){passCallback();passCallback=null;}}
+  else if(passMode==='change-new'){if(val.length<4){shakePass();showToast('Mínimo 4 caracteres','bad');return;}ADMIN_PASS=val;closeModal('passModal');showToast('Senha salva','ok');}
+}
+function shakePass(){const i=document.getElementById('passInput');i.value='';i.classList.remove('shake');void i.offsetWidth;i.classList.add('shake');}
+function togglePassVis(){const i=document.getElementById('passInput'),b=document.getElementById('eyeBtn');i.type=i.type==='password'?'text':'password';b.textContent=i.type==='password'?'👁️':'🙈';i.focus();}
+function askChangePass(){requirePass('🔑 Nova Senha','Defina a nova senha admin.',()=>{passMode='change-new';document.getElementById('passModalTitle').textContent='🔑 Nova Senha';document.getElementById('passInput').value='';openModal('passModal');setTimeout(()=>document.getElementById('passInput').focus(),350);});}
+function askLogout(){confirm_('Sair do painel admin?',()=>{adminUnlocked=false;ADMIN_PASS='';activateTab('scan');showToast('Saiu do admin','warn');});}
+function openModal(id){document.getElementById(id).classList.add('show');}
+function closeModal(id){document.getElementById(id).classList.remove('show');}
+document.querySelectorAll('.modal-bg').forEach(bg=>bg.addEventListener('click',e=>{if(e.target===bg)closeModal(bg.id);}));
+let confirmCb=null;
+function confirm_(msg,cb){
+  confirmCb=cb;document.getElementById('confirmMsg').textContent=msg;
+  document.getElementById('confirmYes').onclick=()=>{closeModal('confirmModal');if(confirmCb){confirmCb();confirmCb=null;}};
+  openModal('confirmModal');
+}
+
+// ── Toast ──
+let toastT=null;
+function showToast(msg,type=''){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.className='toast show'+(type?' '+type:'');
+  if(toastT)clearTimeout(toastT);
+  toastT=setTimeout(()=>t.className='toast',2800);
+}
+
+// ── Stats ──
+async function loadStats(){
+  try{
+    const r=await fetch('/api/stats');const d=await r.json();
+    document.getElementById('stTotal').textContent=(d.total||0).toLocaleString('pt-BR');
+    document.getElementById('stRotas').textContent=d.rotas||0;
+    document.getElementById('stExtras').textContent=d.extras||0;
+    document.getElementById('countLbl').textContent=(d.total||0).toLocaleString('pt-BR');
+    document.getElementById('scanFoot').textContent='BASE: '+(d.total||0).toLocaleString('pt-BR')+' CEPs · Gemini Vision';
+  }catch(e){document.getElementById('scanFoot').textContent='Erro ao carregar stats';}
+}
+
+// ═══════════════════════════════════════════════════════
+//  📷 CÂMERA AO VIVO
+// ═══════════════════════════════════════════════════════
+let stream=null, flashTrack=null, flashOn=false, busy=false;
+
+async function toggleCamera(){
+  if(stream){stopCamera();return;}
+  await startCamera();
+}
+
+async function startCamera(){
+  const btn=document.getElementById('btnCam');
+  btn.disabled=true;btn.textContent='⏳ Abrindo...';
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({
+      video:{
+        facingMode: CFG.rearCam ? {ideal:'environment'} : 'user',
+        width:  {ideal: CFG.hiRes ? 1920 : 1280},
+        height: {ideal: CFG.hiRes ? 1080 : 720}
+      }
+    });
+    const v=document.getElementById('videoEl');
+    v.srcObject=stream;
+    await new Promise(res=>{
+      if(v.readyState>=2){res();return;}
+      v.onloadedmetadata=res;
+      setTimeout(res,2500);
+    });
+    v.play().catch(()=>{});
+
+    // Mostra câmera, esconde placeholder
+    document.getElementById('camPh').classList.add('hidden');
+    document.getElementById('cepFrame').style.display='block';
+
+    // Lanterna
+    const tracks=stream.getVideoTracks();
+    if(tracks[0]&&'torch' in tracks[0].getCapabilities()){
+      flashTrack=tracks[0];
+      document.getElementById('hbtnFlash').style.display='flex';
+      document.getElementById('btnFlash2').classList.add('show');
+    }
+
+    // Habilita botão de foto
+    document.getElementById('btnShoot').disabled=false;
+    btn.disabled=false;btn.textContent='⏹ PARAR CÂMERA';btn.className='btn-cam-toggle on';
+    setCamStatus('Pronto — toque em 📸','');
+
+  }catch(e){
+    stream=null;btn.disabled=false;
+    btn.textContent='📷 ATIVAR CÂMERA';btn.className='btn-cam-toggle';
+    showToast('Câmera: '+e.message,'bad');
+  }
+}
+
+function stopCamera(){
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null;}
+  document.getElementById('videoEl').srcObject=null;
+  document.getElementById('camPh').classList.remove('hidden');
+  document.getElementById('cepFrame').style.display='none';
+  document.getElementById('hbtnFlash').style.display='none';
+  document.getElementById('btnFlash2').classList.remove('show','on');
+  document.getElementById('btnShoot').disabled=true;
+  const btn=document.getElementById('btnCam');
+  btn.textContent='📷 ATIVAR CÂMERA';btn.className='btn-cam-toggle';
+  flashTrack=null;flashOn=false;busy=false;
+}
+
+async function toggleFlash(){
+  if(!flashTrack){showToast('Lanterna não disponível','bad');return;}
+  flashOn=!flashOn;
+  await flashTrack.applyConstraints({advanced:[{torch:flashOn}]});
+  document.getElementById('hbtnFlash').classList.toggle('active',flashOn);
+  const bf=document.getElementById('btnFlash2');
+  bf.classList.toggle('on',flashOn);bf.textContent=flashOn?'🔦':'⚡';
+}
+
+// ── Status dentro do frame ──
+let camStatusT=null;
+function setCamStatus(msg,type){
+  const el=document.getElementById('camStatus');
+  const txt=document.getElementById('camStatusTxt');
+  clearTimeout(camStatusT);
+  txt.textContent=msg;
+  el.className='cam-status'+(type?' '+type:'');
+  if(type==='ok')  camStatusT=setTimeout(()=>{el.className='cam-status';txt.textContent='Pronto — toque em 📸';},3000);
+  if(type==='err') camStatusT=setTimeout(()=>{el.className='cam-status';txt.textContent='Pronto — toque em 📸';},4000);
+}
+
+// ═══════════════════════════════════════════════════════
+//  📸 CAPTURA + POST /api/scan → resultado imediato
+// ═══════════════════════════════════════════════════════
+function captureFrame(fullImage = false){
+  const v=document.getElementById('videoEl');
+  const c=document.getElementById('canvasEl');
+  const vw=v.videoWidth, vh=v.videoHeight;
+  if(!vw||!vh) return null;
+
+  let sx, sy, sw, sh;
+  if(fullImage){
+    // Imagem completa como fallback
+    sx=0; sy=0; sw=vw; sh=vh;
+  } else {
+    // Recorta a região do frame do CEP — margens mais generosas
+    sx = Math.floor(vw * 0.05);
+    sy = Math.floor(vh * 0.22);
+    sw = Math.floor(vw * 0.90);
+    sh = Math.floor(vh * 0.44);
+  }
+
+  const scale = Math.min(2.0, 1200 / Math.max(sw, sh));
+  c.width  = Math.round(sw * scale);
+  c.height = Math.round(sh * scale);
+
+  const ctx = c.getContext('2d');
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,c.width,c.height);
+  ctx.drawImage(v, sx, sy, sw, sh, 0, 0, c.width, c.height);
+
+  // Boost de contraste para melhorar leitura de CEP
+  const id=ctx.getImageData(0,0,c.width,c.height), d=id.data;
+  let mn=255,mx=0;
+  for(let i=0;i<d.length;i+=4){const g=.299*d[i]+.587*d[i+1]+.114*d[i+2];if(g<mn)mn=g;if(g>mx)mx=g;}
+  const rng=(mx-mn)||1;
+  for(let i=0;i<d.length;i+=4)
+    for(let k=0;k<3;k++){
+      const s=((d[i+k]-mn)/rng)*255;
+      d[i+k]=Math.min(255,Math.max(0,Math.round((s-128)*1.7+128)));
+    }
+  ctx.putImageData(id,0,0);
+  return c.toDataURL('image/jpeg',0.88).split(',')[1];
+}
+
+async function tirarFoto(){
+  if(busy){showToast('Aguarde...','warn');return;}
+  if(!stream){showToast('Ative a câmera primeiro','bad');return;}
+
+  busy=true;
+  const btn=document.getElementById('btnShoot');
+  btn.disabled=true;btn.className='btn-shoot busy';btn.textContent='⏳  ANALISANDO...';
+  setCamStatus('🤖 IA lendo o CEP...','loading');
+
+  // Pulso visual nos cantos do frame
+  document.querySelectorAll('.fc').forEach(c=>c.style.borderColor='#3b7ff5');
+
+  const b64=captureFrame(false);
+  if(!b64){
+    busy=false;resetBtnShoot();
+    setCamStatus('❌ Câmera não pronta','err');return;
+  }
+
+  try{
+    // 1ª tentativa: imagem recortada do frame
+    let result = await callScanAPI(b64);
+
+    // 2ª tentativa automática: imagem completa se não achou CEP (não erro de API)
+    if(!result.ok && result.error==='Nenhum CEP detectado na imagem'){
+      setCamStatus('🔍 Tentando imagem completa...','loading');
+      const b64Full = captureFrame(true);
+      if(b64Full){
+        result = await callScanAPI(b64Full);
+      }
+    }
+
+    busy=false;resetBtnShoot();
+
+    if(!result.ok||!result.cep){
+      document.querySelectorAll('.fc').forEach(c=>c.style.borderColor='var(--error)');
+      setTimeout(()=>document.querySelectorAll('.fc').forEach(c=>c.style.borderColor='var(--accent)'),1500);
+      setCamStatus('❌ '+(result.error||'CEP não encontrado'),'err');
+      if(CFG.vibrate&&navigator.vibrate) navigator.vibrate(350);
+      showToast(result.error||'Nenhum CEP detectado','bad');
+      return;
+    }
+
+    // ✅ Sucesso — cantos verdes
+    document.querySelectorAll('.fc').forEach(c=>c.style.borderColor='var(--success)');
+    setTimeout(()=>document.querySelectorAll('.fc').forEach(c=>c.style.borderColor='var(--accent)'),2000);
+    setCamStatus('✅ CEP: '+result.cep,'ok');
+    if(CFG.vibrate&&navigator.vibrate) navigator.vibrate(result.rota?[100,50,100,50,200]:300);
+
+    mostrarResultado(result);
+    if(result.rota) addHistory(result.cep,result.rota);
+
+  }catch(e){
+    busy=false;resetBtnShoot();
+    setCamStatus('❌ Erro de rede','err');
+    showToast('Erro: '+e.message,'bad');
+  }
+}
+
+async function callScanAPI(b64){
+  const resp=await fetch('/api/scan',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({image:b64,mime:'image/jpeg'})
+  });
+  return await resp.json();
+}
+
+function resetBtnShoot(){
+  const b=document.getElementById('btnShoot');
+  b.disabled=false;b.className='btn-shoot';b.textContent='📸  TIRAR FOTO';
+}
+
+function mostrarResultado(result){
+  const wrap=document.getElementById('resultWrap');
+  const card=document.getElementById('resultCard');
+  const cepEl=document.getElementById('resCEP');
+  const rotaEl=document.getElementById('resRota');
+  const spk=document.getElementById('speakBtn');
+
+  cepEl.textContent=result.cep||'—';
+
+  if(result.rota){
+    rotaEl.textContent=result.rota;
+    rotaEl.className='res-rota';
+    card.className='result-card ok';
+    spk.style.display='inline-flex';
+    if(CFG.autoSpeak) speak('Rota '+result.rota.split('').join(' '));
+  } else {
+    rotaEl.textContent=result.error||'Não encontrado';
+    rotaEl.className='res-rota err-txt';
+    card.className='result-card err';
+    spk.style.display='none';
+  }
+
+  wrap.classList.add('open');
+  setTimeout(()=>wrap.scrollIntoView({behavior:'smooth',block:'nearest'}),150);
+}
+
+// ═══════════════════════════════════════════════════════
+//  ⌨️ BUSCA MANUAL
+// ═══════════════════════════════════════════════════════
+async function buscarCEP(){
+  const val=document.getElementById('cepInput').value.replace(/\D/g,'');
+  if(val.length<8){showToast('CEP inválido — 8 dígitos','bad');return;}
+  const cep=val.slice(0,5)+'-'+val.slice(5,8);
+  try{
+    const r=await fetch('/api/lookup?cep='+encodeURIComponent(cep));
+    const d=await r.json();
+    const wrap=document.getElementById('resultWrap2');
+    const card=document.getElementById('resultCard2');
+    document.getElementById('resCEP2').textContent=d.cep||cep;
+    if(d.ok&&d.rota){
+      document.getElementById('resRota2').textContent=d.rota;
+      document.getElementById('resRota2').className='res-rota';
+      card.className='rc ok';
+      document.getElementById('speakBtn2').style.display='inline-flex';
+      if(CFG.vibrate&&navigator.vibrate) navigator.vibrate([80,40,80]);
+      if(CFG.autoSpeak) speak('Rota '+d.rota.split('').join(' '));
+      addHistory(d.cep,d.rota);
+    } else {
+      document.getElementById('resRota2').textContent=d.error||'Não encontrado';
+      document.getElementById('resRota2').className='res-rota err-txt';
+      card.className='rc err';
+      document.getElementById('speakBtn2').style.display='none';
+    }
+    wrap.classList.add('open');
+    setTimeout(()=>wrap.scrollIntoView({behavior:'smooth',block:'nearest'}),100);
+  }catch(e){showToast('Erro de rede','bad');}
+}
+function formatCEP(el){
+  let v=el.value.replace(/\D/g,'');
+  if(v.length>5) v=v.slice(0,5)+'-'+v.slice(5,8);
+  el.value=v;
+}
+
+// ═══════════════════════════════════════════════════════
+//  📋 HISTÓRICO
+// ═══════════════════════════════════════════════════════
+let histData=[];
+function loadHistory(){try{histData=JSON.parse(localStorage.getItem('rotaHist')||'[]');}catch(e){histData=[];}renderHistory();}
+function addHistory(cep,rota){
+  histData=histData.filter(h=>h.cep!==cep);
+  histData.unshift({cep,rota,ts:Date.now()});
+  if(histData.length>50) histData.pop();
+  localStorage.setItem('rotaHist',JSON.stringify(histData));
+  renderHistory();
+}
+function clearHistory(){confirm_('Apagar todo o histórico?',()=>{histData=[];localStorage.removeItem('rotaHist');renderHistory();showToast('Histórico limpo','ok');});}
+function renderHistory(){
+  const list=document.getElementById('histList'),empty=document.getElementById('histEmpty');
+  if(!histData.length){list.innerHTML='';empty.style.display='block';return;}
+  empty.style.display='none';
+  list.innerHTML=histData.slice(0,30).map((h,i)=>{
+    const d=new Date(h.ts);
+    const t=d.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+' · '+d.toLocaleDateString('pt-BR');
+    return `<div class="hist-item" style="animation-delay:${i*25}ms" onclick="repeatHist('${h.cep}','${h.rota}')"><div><div class="hist-cep">${h.cep}</div><div class="hist-time">${t}</div></div><div class="hist-rota">${h.rota}</div></div>`;
+  }).join('');
+}
+function repeatHist(cep,rota){switchTab('manual');document.getElementById('cepInput').value=cep;}
+
+// ═══════════════════════════════════════════════════════
+//  ⚙️ ADMIN
+// ═══════════════════════════════════════════════════════
+let pendingAdds={};
+function addManual(){
+  const cepRaw=document.getElementById('newCEP').value;
+  const rota=document.getElementById('newRota').value.trim().toUpperCase();
+  const digits=cepRaw.replace(/\D/g,'');
+  if(digits.length!==8){showToast('CEP inválido','bad');return;}
+  if(!rota){showToast('Informe a rota','bad');return;}
+  const cep=digits.slice(0,5)+'-'+digits.slice(5);
+  pendingAdds[cep]=rota;
+  document.getElementById('newCEP').value='';document.getElementById('newRota').value='';
+  renderTags();document.getElementById('btnSaveManu').disabled=false;
+  showToast(cep+' pendente','warn');
+}
+function renderTags(){
+  const area=document.getElementById('tagsArea'),entries=Object.entries(pendingAdds);
+  if(!entries.length){area.innerHTML='<span style="color:var(--text3);font-size:.75rem;margin:auto">Nenhum pendente</span>';return;}
+  area.innerHTML=entries.map(([cep,rota])=>`<span class="tag" onclick="removeTag('${cep}')">${cep}→${rota} <span style="color:var(--text3);font-size:.65rem">✕</span></span>`).join('');
+}
+function removeTag(cep){delete pendingAdds[cep];renderTags();if(!Object.keys(pendingAdds).length)document.getElementById('btnSaveManu').disabled=true;}
+async function saveManual(){
+  const entries=Object.entries(pendingAdds).map(([cep,rota])=>({cep,rota}));
+  if(!entries.length) return;
+  try{
+    const r=await fetch('/api/admin/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:ADMIN_PASS,entries})});
+    const d=await r.json();
+    if(!d.ok){showToast(d.error||'Erro','bad');return;}
+    pendingAdds={};renderTags();document.getElementById('btnSaveManu').disabled=true;
+    showToast(d.added+' CEP(s) salvo(s)!','ok');loadStats();
+  }catch(e){showToast('Erro de rede','bad');}
+}
+function handleDrop(e){e.preventDefault();document.getElementById('uploadZone').classList.remove('drag');handleFile(e.dataTransfer.files[0]);}
+function handleFile(file){
+  if(!file) return;
+  const ext=file.name.split('.').pop().toLowerCase();
+  const notice=document.getElementById('importNotice');
+  notice.className='import-notice show';notice.textContent='⏳ Processando...';
+  if(ext==='csv'||ext==='txt'){
+    const r=new FileReader();r.onload=e=>sendCSV(e.target.result);r.readAsText(file,'UTF-8');
+  } else if(ext==='xlsx'||ext==='xls'){
+    const r=new FileReader();
+    r.onload=e=>{const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});const rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1});sendCSV(rows.map(r=>r.join(',')).join('\n'));};
+    r.readAsArrayBuffer(file);
+  } else {notice.className='import-notice show err';notice.textContent='❌ Use .xlsx ou .csv';}
+}
+async function sendCSV(csv){
+  const notice=document.getElementById('importNotice');
+  try{
+    const r=await fetch('/api/admin/import',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:ADMIN_PASS,csv})});
+    const d=await r.json();
+    if(!d.ok){notice.className='import-notice show err';notice.textContent='❌ '+d.error;return;}
+    notice.className='import-notice show';
+    notice.textContent='✅ '+d.added+' importados'+(d.skipped?' ('+d.skipped+' ignorados)':'');
+    document.getElementById('fileInput').value='';showToast(d.added+' CEPs importados!','ok');loadStats();
+  }catch(e){notice.className='import-notice show err';notice.textContent='❌ Erro de rede';}
+}
+async function exportCSV(){
+  try{
+    const r=await fetch('/api/admin/export',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:ADMIN_PASS})});
+    const d=await r.json();
+    if(!d.ok){showToast(d.error,'bad');return;}
+    const blob=new Blob([d.csv],{type:'text/csv;charset=utf-8;'});
+    const url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download='base_cep_rota.csv';a.click();URL.revokeObjectURL(url);
+    showToast('CSV exportado!','ok');
+  }catch(e){showToast('Erro de rede','bad');}
+}
+async function askResetDB(){
+  confirm_('Apagar todos os CEPs extras?',async()=>{
+    try{
+      const r=await fetch('/api/admin/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:ADMIN_PASS})});
+      const d=await r.json();if(!d.ok){showToast(d.error,'bad');return;}
+      showToast('Base resetada','warn');loadStats();
+    }catch(e){showToast('Erro de rede','bad');}
+  });
+}
+
+
+// ═══════════════════════════════════════════════════════
+//  🔧 SERVICE WORKER — obrigatório para PWA installability
+// ═══════════════════════════════════════════════════════
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+      .then(reg => console.log('[SW] registrado, scope:', reg.scope))
+      .catch(err => console.warn('[SW] falhou:', err));
+  });
+}
+
+// ═══════════════════════════════════════════════════════
+//  📲 INSTALL WALL — força instalação PWA
+// ═══════════════════════════════════════════════════════
+let deferredPrompt = null;
+
+// Captura o evento do Chrome/Android ANTES de qualquer interação
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredPrompt = e;
+});
+
+function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches
+      || window.navigator.standalone === true   // iOS Safari
+      || document.referrer.startsWith('android-app://');
+}
+
+function isIOS() {
+  return /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+}
+
+function isMobile() {
+  return /android|iphone|ipad|ipod|mobile/i.test(navigator.userAgent);
+}
+
+function showInstallWall() {
+  const wall = document.getElementById('installWall');
+
+  if (isIOS()) {
+    document.getElementById('iwIOS').style.display = 'block';
+  } else if (deferredPrompt || /android/i.test(navigator.userAgent)) {
+    document.getElementById('iwAndroid').style.display = 'block';
+    document.getElementById('btnInstallAndroid').addEventListener('click', async () => {
+      if (!deferredPrompt) {
+        // Chrome já mostrou o banner — orienta o usuário
+        showToast('Use o menu ⋮ → "Adicionar à tela inicial"', 'warn');
+        return;
+      }
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      if (outcome === 'accepted') {
+        wall.classList.add('hidden');
+      }
+    });
+  } else {
+    // Desktop ou browser sem suporte a PWA
+    document.getElementById('iwGeneric').style.display = 'block';
+  }
+
+  // Mostra link "continuar sem instalar" após 8 segundos
+  setTimeout(() => {
+    document.getElementById('iwSkip').classList.add('visible');
+  }, 8000);
+}
+
+function skipInstall() {
+  document.getElementById('installWall').classList.add('hidden');
+}
+
+// Ouve instalação concluída (Android) — some o wall automaticamente
+window.addEventListener('appinstalled', () => {
+  document.getElementById('installWall').classList.add('hidden');
+});
+
+// ── Lógica de entrada ──
+// Se já está rodando como app instalado → pula o wall direto
+if (isStandalone()) {
+  document.getElementById('installWall').classList.add('hidden');
+} else {
+  showInstallWall();
+}
+
+// ── Init ──
+loadCfg();
+loadHistory();
+loadStats();
+if('speechSynthesis' in window){speechSynthesis.onvoiceschanged=loadVoices;loadVoices();}
+</script>
+</body>
+</html>
