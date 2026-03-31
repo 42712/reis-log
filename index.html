@@ -1136,5 +1136,71 @@ loadHistory();
 loadStats();
 if('speechSynthesis' in window){speechSynthesis.onvoiceschanged=loadVoices;loadVoices();}
 </script>
+
+// Forçar instalação do PWA
+let deferredPrompt;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  // Previne o mini-infobar do Chrome
+  e.preventDefault();
+  // Salva o evento para usar depois
+  deferredPrompt = e;
+  
+  // Mostra um botão de instalação
+  showInstallButton();
+});
+
+function showInstallButton() {
+  const installBtn = document.createElement('button');
+  installBtn.id = 'installBtn';
+  installBtn.innerHTML = '📲 INSTALAR APP';
+  installBtn.style.cssText = `
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: linear-gradient(135deg, #f5a623, #e8920f);
+    color: #000;
+    border: none;
+    border-radius: 30px;
+    padding: 12px 24px;
+    font-family: var(--font-d);
+    font-size: 1rem;
+    font-weight: bold;
+    z-index: 1000;
+    box-shadow: 0 4px 20px rgba(245,166,35,0.5);
+    cursor: pointer;
+    animation: pulse 1.5s infinite;
+  `;
+  
+  installBtn.onclick = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        installBtn.remove();
+      }
+      deferredPrompt = null;
+    }
+  };
+  
+  document.body.appendChild(installBtn);
+  
+  // Remove após 10 segundos se não instalou
+  setTimeout(() => {
+    if (installBtn.parentNode) installBtn.remove();
+  }, 10000);
+}
+
+// Animação pulsante
+const style = document.createElement('style');
+style.textContent = `
+  @keyframes pulse {
+    0% { transform: translateX(-50%) scale(1); opacity: 1; }
+    50% { transform: translateX(-50%) scale(1.05); opacity: 0.9; }
+    100% { transform: translateX(-50%) scale(1); opacity: 1; }
+  }
+`;
+document.head.appendChild(style); 
 </body>
 </html>
