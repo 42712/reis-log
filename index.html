@@ -998,8 +998,8 @@ async function initOCR() {
   }
 }
 
-// Pré-processa canvas para máxima legibilidade pelo OCR
-function preprocessCanvas(canvas) {
+// Pré-processa canvas — 2 modos: suave (padrão) e binário (fallback)
+function preprocessCanvas(canvas, binary = false) {
   const ctx = canvas.getContext('2d');
   const id  = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const d   = id.data;
@@ -1010,24 +1010,32 @@ function preprocessCanvas(canvas) {
     d[i] = d[i+1] = d[i+2] = g;
   }
 
-  // 2. Calcular média para threshold adaptativo
-  let sum = 0;
-  for (let i = 0; i < d.length; i += 4) sum += d[i];
-  const avg = sum / (d.length / 4);
-
-  // 3. Binarização + contraste agressivo
-  for (let i = 0; i < d.length; i += 4) {
-    // Aumenta contraste antes do threshold
-    let v = ((d[i] - avg) * 2.2 + avg);
-    v = Math.max(0, Math.min(255, v));
-    // Threshold: pixels acima de 50% viram branco, abaixo viram preto
-    v = v > 128 ? 255 : 0;
-    d[i] = d[i+1] = d[i+2] = v;
+  if (binary) {
+    // Modo binário: para imagens com fundo complexo
+    let sum = 0;
+    for (let i = 0; i < d.length; i += 4) sum += d[i];
+    const avg = sum / (d.length / 4);
+    for (let i = 0; i < d.length; i += 4) {
+      const v = d[i] > avg * 0.85 ? 255 : 0;
+      d[i] = d[i+1] = d[i+2] = v;
+    }
+  } else {
+    // Modo suave: só aumenta contraste, deixa Tesseract decidir
+    let mn = 255, mx = 0;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i] < mn) mn = d[i];
+      if (d[i] > mx) mx = d[i];
+    }
+    const rng = (mx - mn) || 1;
+    for (let i = 0; i < d.length; i += 4) {
+      const v = Math.round(((d[i] - mn) / rng) * 255);
+      d[i] = d[i+1] = d[i+2] = Math.min(255, Math.max(0, v));
+    }
   }
   ctx.putImageData(id, 0, 0);
 }
 
-function captureCanvas(fullImage = false) {
+function captureCanvas(fullImage = false, binary = false) {
   const v = document.getElementById('videoEl');
   const c = document.getElementById('canvasEl');
   const vw = v.videoWidth, vh = v.videoHeight;
@@ -1054,7 +1062,7 @@ function captureCanvas(fullImage = false) {
   ctx.fillRect(0, 0, c.width, c.height);
   ctx.drawImage(v, sx, sy, sw, sh, 0, 0, c.width, c.height);
 
-  preprocessCanvas(c);
+  preprocessCanvas(c, binary);
   return c;
 }
 
@@ -1079,25 +1087,36 @@ function extractCEP(text) {
 
 async function ocrScan(fullImage = false) {
   if (!ocrReady) {
-    // Inicializa lazy se ainda não carregou
     await initOCR();
     if (!ocrReady) return { ok: false, error: 'OCR não inicializado' };
   }
 
-  const canvas = captureCanvas(fullImage);
+  // Tentativa 1: contraste suave
+  let canvas = captureCanvas(fullImage, false);
   if (!canvas) return { ok: false, error: 'Câmera não pronta' };
 
-  const { data: { text } } = await ocrWorker.recognize(canvas);
-  const cep = extractCEP(text);
+  let text1 = (await ocrWorker.recognize(canvas)).data.text;
+  let cep   = extractCEP(text1);
 
-  if (!cep) return { ok: false, error: 'Nenhum CEP detectado na imagem' };
+  // Tentativa 2: binarização se não achou
+  if (!cep) {
+    canvas = captureCanvas(fullImage, true);
+    const text2 = (await ocrWorker.recognize(canvas)).data.text;
+    cep = extractCEP(text2);
+    if (!cep) {
+      // Loga o que o OCR leu para debug
+      const rawTxt = (text1 + ' | ' + text2).replace(/\n/g,' ').trim().slice(0,60);
+      console.log('[OCR] raw:', rawTxt);
+      return { ok: false, error: 'Nenhum CEP detectado', raw: rawTxt };
+    }
+  }
 
-  // Consulta a base local via /api/lookup
+  // Consulta a base
   const resp = await fetch('/api/lookup?cep=' + encodeURIComponent(cep));
   const d    = await resp.json();
 
   if (d.ok && d.rota) return { ok: true, cep: d.cep, rota: d.rota, aviso: d.aviso };
-  return { ok: true, cep: cep, rota: null, error: d.error || 'CEP não encontrado na base' };
+  return { ok: true, cep: cep, rota: null, error: 'CEP não cadastrado na base' };
 }
 
 async function tirarFoto(){
@@ -1115,7 +1134,7 @@ async function tirarFoto(){
     let result = await ocrScan(false);
 
     // 2ª tentativa: imagem completa se não achou CEP
-    if(!result.ok && result.error==='Nenhum CEP detectado na imagem'){
+    if(!result.ok && !result.cep){
       setCamStatus('🔍 Tentando imagem completa...','loading');
       result = await ocrScan(true);
     }
@@ -1125,9 +1144,17 @@ async function tirarFoto(){
     if(!result.ok || !result.cep){
       document.querySelectorAll('.fc').forEach(c=>c.style.borderColor='var(--error)');
       setTimeout(()=>document.querySelectorAll('.fc').forEach(c=>c.style.borderColor='var(--accent)'),1500);
-      setCamStatus('❌ '+(result.error||'CEP não encontrado'),'err');
       if(CFG.vibrate&&navigator.vibrate) navigator.vibrate(350);
-      showToast(result.error||'Nenhum CEP detectado','bad');
+      if(result.cep){
+        // OCR achou CEP mas não está na base — mostra e oferece cadastro
+        setCamStatus('⚠️ CEP lido: '+result.cep+' (sem rota)','err');
+        mostrarResultado(result);
+        showToast('CEP '+result.cep+' não cadastrado — vá em Admin para adicionar','warn');
+      } else {
+        setCamStatus('❌ '+(result.error||'CEP não detectado'),'err');
+        if(result.raw) showToast('OCR leu: '+result.raw,'warn');
+        else showToast(result.error||'Nenhum CEP detectado','bad');
+      }
       return;
     }
 
@@ -1172,6 +1199,22 @@ function mostrarResultado(result){
     rotaEl.className='res-rota err-txt';
     card.className='result-card err';
     spk.style.display='none';
+    // Botão rápido: pré-preenche Admin com o CEP não encontrado
+    if(result.cep){
+      let addBtn=document.getElementById('quickAddBtn');
+      if(!addBtn){
+        addBtn=document.createElement('button');
+        addBtn.id='quickAddBtn';
+        addBtn.style.cssText='margin-top:8px;padding:9px 18px;border:none;border-radius:10px;background:var(--accent);color:#000;font-weight:700;font-size:.8rem;cursor:pointer;width:100%';
+        card.appendChild(addBtn);
+      }
+      addBtn.textContent='➕ Cadastrar rota para '+result.cep;
+      addBtn.onclick=()=>{
+        switchTab('admin');
+        const f=document.getElementById('newCEP');
+        if(f){f.value=result.cep;f.focus();}
+      };
+    }
   }
 
   wrap.classList.add('open');
@@ -1204,6 +1247,21 @@ async function buscarCEP(){
       document.getElementById('resRota2').className='res-rota err-txt';
       card.className='rc err';
       document.getElementById('speakBtn2').style.display='none';
+      // Botão rápido para cadastrar
+      let addBtn2=document.getElementById('quickAddBtn2');
+      if(!addBtn2){
+        addBtn2=document.createElement('button');
+        addBtn2.id='quickAddBtn2';
+        addBtn2.style.cssText='margin-top:10px;padding:9px 18px;border:none;border-radius:10px;background:var(--accent);color:#000;font-weight:700;font-size:.8rem;cursor:pointer;width:100%';
+        card.appendChild(addBtn2);
+      }
+      const cepFinal=d.cep||cep;
+      addBtn2.textContent='➕ Cadastrar rota para '+cepFinal;
+      addBtn2.onclick=()=>{
+        switchTab('admin');
+        const f=document.getElementById('newCEP');
+        if(f){f.value=cepFinal;f.focus();}
+      };
     }
     wrap.classList.add('open');
     setTimeout(()=>wrap.scrollIntoView({behavior:'smooth',block:'nearest'}),100);
